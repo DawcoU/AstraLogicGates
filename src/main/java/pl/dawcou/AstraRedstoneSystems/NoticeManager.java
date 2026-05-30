@@ -66,7 +66,7 @@ public class NoticeManager {
     }
 
     public void sendDevNotice(String currentVersion, String latestStable) {
-        String devTitle = getLang().equalsIgnoreCase("pl") ? "§bUżywasz wersji testowej (Development): §f§nv" : "§bYou are using a Development version: §f§nv";
+        String devTitle = getLang().equalsIgnoreCase("pl") ? "§bUżywasz wersji testowej: §f§nv" : "§bYou are using a Development version: §f§nv";
         String stableInfo = getLang().equalsIgnoreCase("pl") ? "§eNa Modrinth najnowsza stabilna to: §fv" : "§eThe latest stable on Modrinth is: §fv";
         String warning = getLang().equalsIgnoreCase("pl") ? "§bUważaj na błędy, kod jest w fazie rozwoju!" : "§bWatch out for bugs, the code is in development!";
         Bukkit.getConsoleSender().sendMessage("");

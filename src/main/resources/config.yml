@@ -2,19 +2,25 @@
 # |                     AstraRedstoneSystems - Configuration file             |
 # +---------------------------------------------------------------------------+
 
-# ===============================
-#          MAIN SETTINGS
-# ===============================
+# =========================================
+#             General Settings
+# =========================================
+settings:
+  # Wybierz język pluginu (Dostępne: pl, en)
+  # Select the plugin language (Available: pl, en)
+  language: pl
 
-# DO NOT change this value
-config-version: 1.1.0
+  # Should the plugin check for newer versions of the plugin?
+  check-updates: true
 
-# Wybierz język pluginu (Dostępne: pl, en)
-# Select the plugin language (Available: pl, en)
-language: pl
+  # Should debug output from logic gates be sent to the console?
+  debug-mode: false
 
-# Should the plugin check for newer versions of the plugin?
-check-updates: true
-
-# Should debugging be enabled in logic gates?
-debug-mode: false
+# ==========================================
+#              Logic Gate Setup
+# ==========================================
+gates:
+  data-gates:
+    battery:
+      decay-time-minutes: 5 # Every how many minutes should it discharge one percent?
+      charge-time-seconds: 5 # Every how many seconds should it charge at one percent?

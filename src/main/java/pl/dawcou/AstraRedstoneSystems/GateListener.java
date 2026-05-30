@@ -244,13 +244,23 @@ public class GateListener implements Listener {
             // --- WYJĄTEK DLA KABLA ---
             if (type.equals("CABLE_DATA")) {
                 // KABEL: Nie potrzebuje kierunku (out), stanu (state) ani zapisu bloku pod spodem
-                config.set(path + ".current_out", 0);
+                config.set(path + ".current_out", "0");
                 config.set(path + ".power", 0);
+
+            } else if (type.equals("DISPLAY")) {
+                config.set(path + ".out", outFace.name());
+                config.set(path + ".current_out", "0");
+
+                // Ustalenie bloku wyjściowego na podstawie outFace
+                Block target = block.getRelative(outFace);
+                Block outputBlock = target.getRelative(BlockFace.DOWN);
+                config.set(path + ".oldBlock", outputBlock.getType().name());
+
             } else {
                 // INNE BRAMKI: Używają outFace do ustalenia wyjścia
                 config.set(path + ".out", outFace.name());
                 config.set(path + ".state", false);
-                config.set(path + ".current_out", 0);
+                config.set(path + ".current_out", "0");
 
                 // Ustalenie bloku wyjściowego na podstawie outFace
                 Block target = block.getRelative(outFace);
@@ -302,7 +312,20 @@ public class GateListener implements Listener {
 
             if ("DISPLAY".equals(type)) {
                 World world = block.getWorld();
-                Location displayLoc = block.getLocation().add(0.5, 2, 0.5);
+
+                // 1. Zaczynamy na środku bloku i podnosimy o 2 bloki w górę (oś Y)
+                Location displayLoc = block.getLocation().clone().add(0.5, 2.0, 0.5);
+
+                // 2. Pobieramy kierunek wyjścia bramki z configu
+                String outName = config.getString(path + ".out", "NORTH");
+
+                // 3. Sprawdzamy kierunek i przesuwamy o 2 bloki dalej przed wyjście!
+                switch (outName.toUpperCase()) {
+                    case "NORTH" -> displayLoc.add(0, 0, -2.0); // Przesunięcie na Północ
+                    case "SOUTH" -> displayLoc.add(0, 0, 2.0);  // Przesunięcie na Południe
+                    case "EAST"  -> displayLoc.add(2.0, 0, 0);  // Przesunięcie na Wschód
+                    case "WEST"  -> displayLoc.add(-2.0, 0, 0); // Przesunięcie na Zachód
+                }
 
                 TextDisplay textDisplay = world.spawn(displayLoc, TextDisplay.class);
 
@@ -333,32 +356,45 @@ public class GateListener implements Listener {
                     if (cleanLine.contains("Kanał: ")) {
                         config.set(path + ".channel", cleanLine.replace("Kanał: ", "").trim());
                     }
-                    else if (cleanLine.contains("Wartość: ")) {
-                        int val = Integer.parseInt(cleanLine.replace("Wartość: ", "").trim());
-                        // NUMBER_GATE i DECODER używają tego samego klucza .value dla spójności logiki
-                        if (type.equals("NUMBER_GATE") || type.equals("DECODER")) {
-                            config.set(path + ".value", val);
-                        }
-                    }
                     else if (cleanLine.contains("min: ")) {
                         config.set(path + ".min", Integer.parseInt(cleanLine.replace("min: ", "").trim()));
                     }
                     else if (cleanLine.contains("max: ")) {
                         config.set(path + ".max", Integer.parseInt(cleanLine.replace("max: ", "").trim()));
                     }
+                    else if (cleanLine.contains("Wartość: ")) {
+                        int val = Integer.parseInt(cleanLine.replace("Wartość: ", "").trim());
+                        if (type.equals("NUMBER_GATE") || type.equals("DECODER")) {
+                            config.set(path + ".value", val);
+                        }
+                    }
+                    else if (cleanLine.contains("Tekst: ")) {
+                        String textVal = cleanLine.replace("Tekst: ", "").trim();
+                        if (type.equals("STRING_GATE") || type.equals("STRING_DECODER")) {
+                            config.set(path + ".value", textVal);
+                        }
+                    }
                     else if (cleanLine.contains("Tryb: ")) {
                         String rawMode = cleanLine.replace("Tryb: ", "").trim();
-                        if ("MATH".equals(type)) {
-                            String modeCode = switch (rawMode) {
-                                case "Subtract" -> "SUB";
-                                case "Multiply" -> "MUL";
-                                case "Divide"   -> "DIV";
-                                case "Power"    -> "POW";
-                                default         -> "ADD";
-                            };
-                            config.set(path + ".mode", modeCode);
-                        } else {
-                            config.set(path + ".mode", rawMode);
+
+                        switch (type) {
+                            case "MATH" -> {
+                                String modeCode = switch (rawMode) {
+                                    case "Subtract" -> "SUB";
+                                    case "Multiply" -> "MUL";
+                                    case "Divide"   -> "DIV";
+                                    case "Power"    -> "POW";
+                                    default         -> "ADD";
+                                };
+                                config.set(path + ".mode", modeCode);
+                            }
+                            case "STRING_COMPARATOR" -> {
+                                config.set(path + ".mode", rawMode.toUpperCase());
+                            }
+                            default -> {
+                                // Dla zwykłego COMPARATORA i innych bramek używających znaków typu >, <, ==
+                                config.set(path + ".mode", rawMode);
+                            }
                         }
                     }
                     else if (cleanLine.contains("Limit: ")) {
@@ -526,7 +562,7 @@ public class GateListener implements Listener {
         Player p = e.getPlayer();
 
         // Update Checker
-        if (plugin.getConfig().getBoolean("check-updates", true) && p.hasPermission("astrars.update")) {
+        if (plugin.getConfig().getBoolean("settings.check-updates", true) && p.hasPermission("astrars.update")) {
             plugin.getServer().getAsyncScheduler().runNow(plugin, task -> {
                 new UpdateChecker(plugin).getVersion(version -> {
                     if (!plugin.getDescription().getVersion().equals(version)) {

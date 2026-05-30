@@ -143,81 +143,6 @@ public class CommandManager implements org.bukkit.command.CommandExecutor, org.b
                 }
                 return true;
             }
-
-            // --- LINK ---
-            if (args[0].equalsIgnoreCase("link")) {
-                if (!player.hasPermission("astrars.admin")) {
-                    player.sendMessage(plugin.getLanguageManager().getWithPrefix("no-permission"));
-                    return true;
-                }
-
-                Block b = player.getTargetBlockExact(8);
-                if (b == null || b.getType() == Material.AIR) {
-                    player.sendMessage(plugin.getLanguageManager().getWithPrefix("link-no-block"));
-                    return true;
-                }
-
-                Location loc = b.getLocation();
-                String path = "gates." + GateUtils.locToStr(loc);
-                if (!plugin.getGatesConfig().contains(path)) {
-                    player.sendMessage(plugin.getLanguageManager().getWithPrefix("link-not-gate"));
-                    return true;
-                }
-
-                UUID uuid = player.getUniqueId();
-                if (!plugin.getLinkingSession().containsKey(uuid)) {
-                    plugin.getLinkingSession().put(uuid, loc);
-                    player.sendMessage(plugin.getLanguageManager().getWithPrefix("link-step-1"));
-                } else {
-                    Location origin = plugin.getLinkingSession().get(uuid);
-                    String originPath = "gates." + GateUtils.locToStr(origin);
-                    String targetStr = GateUtils.locToStr(loc);
-
-                    List<String> links = plugin.getGatesConfig().getStringList(originPath + ".target_links");
-
-                    if (!links.contains(targetStr)) {
-                        links.add(targetStr);
-                        plugin.getGatesConfig().set(originPath + ".target_links", links);
-                        plugin.getGatesConfig().set(originPath + ".target_link", null);
-
-                        plugin.saveGates();
-                        player.sendMessage(plugin.getLanguageManager().getWithPrefix("link-step-2"));
-                    } else {
-                        player.sendMessage(plugin.getLanguageManager().getWithPrefix("link-already-exists"));
-                    }
-                    plugin.getLinkingSession().remove(uuid);
-                }
-                return true;
-            }
-
-            // --- UNLINK ---
-            if (args[0].equalsIgnoreCase("unlink")) {
-                if (!player.hasPermission("astrars.admin")) {
-                    player.sendMessage(plugin.getLanguageManager().getWithPrefix("no-permission"));
-                    return true;
-                }
-
-                Block b = player.getTargetBlockExact(8);
-                if (b == null || b.getType() == Material.AIR) {
-                    player.sendMessage(plugin.getLanguageManager().getWithPrefix("link-no-block"));
-                    return true;
-                }
-
-                Location loc = b.getLocation();
-                String path = "gates." + GateUtils.locToStr(loc);
-
-                if (!plugin.getGatesConfig().contains(path)) {
-                    player.sendMessage(plugin.getLanguageManager().getWithPrefix("link-not-gate"));
-                    return true;
-                }
-
-                plugin.getGatesConfig().set(path + ".target_links", null);
-                plugin.getGatesConfig().set(path + ".target_link", null);
-
-                plugin.saveGates();
-                player.sendMessage(plugin.getLanguageManager().getWithPrefix("unlink-success"));
-                return true;
-            }
         }
         return true;
     }
@@ -230,7 +155,7 @@ public class CommandManager implements org.bukkit.command.CommandExecutor, org.b
         if (cmd.equalsIgnoreCase("astraredstonesystems") || cmd.equalsIgnoreCase("ars")) {
             if (args.length == 1) {
                 // Podpowiedzi dla głównej komendy
-                Arrays.asList("info", "link", "unlink", "reload", "selector", "cut", "paste", "copy", "rotate", "undo", "redo")
+                Arrays.asList("info", "reload", "selector", "cut", "paste", "copy", "rotate", "undo", "redo")
                         .forEach(a -> {
                             if (a.startsWith(args[0].toLowerCase())) hints.add(a);
                         });

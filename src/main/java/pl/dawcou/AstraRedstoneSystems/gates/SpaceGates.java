@@ -58,29 +58,64 @@ public class SpaceGates {
             switch (type) {
                 case "SENDER":
                     String rawChannels = config.getString(path + ".channel", "default");
-                    boolean hasPower = GateUtils.getPowerAt(gate.getRelative(back)) > 0;
                     String[] splitChannels = rawChannels.split(",");
                     boolean hasListener = false;
 
+                    // 1. Pobieramy uniwersalny sygnał jako String z tyłu (obsłuży kable danych, liczby, wszystko)
+                    String incomingData = GateUtils.getStringFrom(gate.getRelative(back), back.getOppositeFace(), plugin);
+
+                    // 2. Jeśli z tyłu nie ma sygnału tekstowego, sprawdzamy tradycyjny redstone / dźwignię
+                    if (incomingData.isEmpty()) {
+                        int traditionalPower = GateUtils.getPowerAt(gate.getRelative(back));
+                        if (traditionalPower > 0) {
+                            incomingData = "1"; // Zamieniamy na String "1" dla kompatybilności binarnej
+                        }
+                    }
+
+                    // 🔥 ZMIANA: Sygnał istnieje, jeśli string nie jest pusty. Zera "0" NIE ignorujemy!
+                    boolean hasValue = !incomingData.isEmpty();
+
+                    // 3. Rozsyłamy dane na kanały jako czysty String
                     for (String chan : splitChannels) {
                         String trimmed = chan.trim();
-                        config.set("channels." + trimmed, hasPower);
+
+                        // Konsekwentnie zapisujemy jako tekst na kanale
+                        config.set("channels." + trimmed, incomingData);
+
                         if (config.getBoolean("active_channels." + trimmed, false)) hasListener = true;
-                        // Resetujemy flagę aktywności, Receiver ustawia ją co tick
                         config.set("active_channels." + trimmed, null);
                     }
 
-                    boolean isTransmitting = hasPower && hasListener;
+                    boolean isTransmitting = hasValue && hasListener;
                     GateUtils.spawnStatusParticle(gate, out, isTransmitting);
-                    GateUtils.spawnStatusParticle(gate, back, hasPower);
-                    newState = false; // Sender sam w sobie nie wystawia sygnału redstone
+                    GateUtils.spawnStatusParticle(gate, back, hasValue);
+                    newState = false;
                     break;
 
                 case "RECEIVER":
                     String channel = config.getString(path + ".channel", "default").trim().replace(" ", "");
-                    // Informujemy Sendorów, że ktoś słucha na tym kanale
                     config.set("active_channels." + channel, true);
-                    newState = config.getBoolean("channels." + channel, false);
+
+                    // 🔥 ZMIANA: Pobieramy dane z kanału zawsze jako String! Domyślnie pustka ""
+                    String transmittedData = config.getString("channels." + channel, "");
+
+                    // Transmisja jest aktywna, jeśli kanał nie jest pusty
+                    boolean hasReceivedPower = !transmittedData.isEmpty();
+
+                    newState = hasReceivedPower;
+
+                    // Pobieramy poprzednią wartość z configu odbiornika zawsze jako String
+                    String lastOut = config.getString(path + ".current_out", "");
+
+                    // Porównujemy czyste Stringi – koniec z błędami typów (Integer vs String)!
+                    if (!transmittedData.equals(lastOut)) {
+                        config.set(path + ".current_out", transmittedData);
+                        config.set(path + ".state", hasReceivedPower);
+
+                        // Przekazujemy stan do aktualizacji bloku przed odbiornikiem
+                        GateUtils.updateOutput(plugin, path, target, hasReceivedPower);
+                    }
+
                     GateUtils.spawnStatusParticle(gate, out, newState);
                     break;
 

@@ -1,0 +1,33 @@
+plugins {
+    id 'java'
+    id 'com.github.johnrengelman.shadow' version '8.1.1'
+}
+
+group = 'pl.dawcou'
+version = '1.3.0'
+
+repositories {
+    mavenCentral()
+    maven { url = 'https://repo.papermc.io/repository/maven-public/' }
+}
+
+dependencies {
+    compileOnly 'io.papermc.paper:paper-api:1.20.4-R0.1-SNAPSHOT'
+    shadow 'org.bstats:bstats-bukkit:3.2.1'
+}
+
+processResources {
+    filesMatching('plugin.yml') {
+        expand(version: project.version)
+    }
+}
+
+shadowJar {
+    archiveClassifier.set('')
+    configurations = [project.configurations.shadow]
+
+    relocate 'org.bstats', 'pl.dawcou.astraredstonesystems.bstats'
+}
+
+// Automatyzacja: żeby po kompilacji od razu był gotowy .jar
+tasks.build.dependsOn shadowJar

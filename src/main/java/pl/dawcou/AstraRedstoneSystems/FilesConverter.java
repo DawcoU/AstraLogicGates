@@ -5,11 +5,11 @@ import org.bukkit.configuration.file.YamlConfiguration;
 import java.io.File;
 import java.io.IOException;
 
-public class GateConverter {
+public class FilesConverter {
 
     private final AstraRS plugin;
 
-    public GateConverter(AstraRS plugin) {
+    public FilesConverter(AstraRS plugin) {
         this.plugin = plugin;
     }
 

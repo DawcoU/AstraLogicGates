@@ -35,53 +35,76 @@ public class GateUtils {
         return b.getBlockPower();
     }
 
-    public static int getDataFrom(Block block, BlockFace fromFace, AstraRS plugin) {
+    public static String getStringFrom(Block block, BlockFace fromFace, AstraRS plugin) {
         String key = locToStr(block.getLocation());
         FileConfiguration config = plugin.getGatesConfig();
+        String path = "gates." + key;
 
-        // Pobieramy sygnał fizyczny (z bloku)
-        int physical = config.getInt("gates." + key + ".current_out", 0);
-        // Pobieramy sygnał "z powietrza" (z linku)
-        int wireless = config.getInt("gates." + key + ".link_input", 0);
+        if (!config.contains(path)) return "";
 
-        // Zwracamy mocniejszy sygnał
-        return Math.max(physical, wireless);
-    }
+        // 1. Sprawdzamy link (bezprzewodowy)
+        int wireless = config.getInt(path + ".link_input", Integer.MIN_VALUE);
 
-    public static void syncLinks(AstraRS plugin) {
-        FileConfiguration config = plugin.getGatesConfig();
-        ConfigurationSection gates = config.getConfigurationSection("gates");
-        if (gates == null) return;
-
-        // KROK 1: Czyścimy link_input wszystkich bramek, żeby nie było starych danych
-        for (String key : gates.getKeys(false)) {
-            config.set("gates." + key + ".link_input", 0);
+        // Jeśli jest sygnał bezprzewodowy, zwróć go
+        if (wireless != Integer.MIN_VALUE) {
+            return String.valueOf(wireless);
         }
 
-        // KROK 2: Rozsyłamy aktualne wartości z nadajników
-        for (String key : gates.getKeys(false)) {
-            String path = "gates." + key;
-            List<String> targets = config.getStringList(path + ".target_links");
+        // 2. Sprawdzamy fizyczny (lokalny)
+        String physical = config.getString(path + ".current_out", "");
 
-            if (!targets.isEmpty()) {
-                int currentVal = config.getInt(path + ".current_out", 0);
-                for (String targetLoc : targets) {
-                    config.set("gates." + targetLoc + ".link_input", currentVal);
+        // Jeśli fizyczny jest pusty, to nie ma sygnału
+        if (physical.isEmpty()) return "";
+
+        // Sprawdzamy, czy to nie jest "NO_SIGNAL" w formie Stringa
+        try {
+            String cleanVal = physical.replaceAll("[^0-9\\-]", "");
+
+            if (!cleanVal.isEmpty() && !cleanVal.equals("-")) {
+                if (Integer.parseInt(cleanVal) == Integer.MIN_VALUE) {
+                    return "";
                 }
             }
+        } catch (NumberFormatException e) {
+            return "";
+        }
+
+        return physical;
+    }
+
+    public static int getNumberFrom(Block block, BlockFace fromFace, AstraRS plugin) {
+        // Korzystamy z jednego źródła prawdy
+        String val = getStringFrom(block, fromFace, plugin);
+
+        if (val.isEmpty()) return Integer.MIN_VALUE;
+
+        try {
+            String cleanVal = val.replaceAll("[^0-9\\-]", "");
+
+            // Jeśli po wyczyszczeniu został pusty tekst (np. ktoś wysłał same litery "ABC")
+            if (cleanVal.isEmpty() || cleanVal.equals("-")) {
+                return Integer.MIN_VALUE;
+            }
+
+            return Integer.parseInt(cleanVal);
+        } catch (NumberFormatException e) {
+            return Integer.MIN_VALUE; // W razie jakiegokolwiek błędu zwracamy brak danych
         }
     }
 
     public static int getCustomOrRedstonePower(AstraRS plugin, Block block) {
-        // 1. Najpierw sprawdzamy, czy ten blok to jedna z TWOICH bramek (cyfrowe dane)
-        String path = "gates." + locToStr(block.getLocation());
-        if (plugin.getGatesConfig().contains(path)) {
-            // Jeśli tak, wyciągamy zapisaną tam wartość liczbową
-            return plugin.getGatesConfig().getInt(path + ".current_out", 0);
-        }
+        String key = locToStr(block.getLocation());
+        String path = "gates." + key;
 
-        // 2. Jeśli to nie jest Twoja bramka, sprawdzamy zwykły Minecraftowy Redstone
-        // (Dźwignie, przyciski, czerwony proszek itp.)
+        if (plugin.getGatesConfig().contains(path)) {
+            // Wyciągamy jako String i parsujemy bezpiecznie!
+            String val = plugin.getGatesConfig().getString(path + ".current_out", "0");
+            try {
+                return Integer.parseInt(val);
+            } catch (NumberFormatException e) {
+                return 0;
+            }
+        }
         return block.getBlockPower();
     }
 
@@ -121,22 +144,25 @@ public class GateUtils {
         Location loc = gate.getLocation().add(0.5, 0.5, 0.5);
         loc.add(face.getDirection().multiply(0.51));
         org.bukkit.Particle.DustOptions dust = active ?
-                new org.bukkit.Particle.DustOptions(org.bukkit.Color.LIME, 1.3F) :
-                new org.bukkit.Particle.DustOptions(org.bukkit.Color.RED, 1.3F);
-        gate.getWorld().spawnParticle(org.bukkit.Particle.REDSTONE, loc, 1, 0, 0, 0, 0, dust);
+                new org.bukkit.Particle.DustOptions(org.bukkit.Color.LIME, 1.4F) :
+                new org.bukkit.Particle.DustOptions(org.bukkit.Color.RED, 1.4F);
+        gate.getWorld().spawnParticle(org.bukkit.Particle.REDSTONE, loc, 2, 0, 0, 0, 0, dust);
     }
 
-    public static void updateDisplayNumber(AstraRS plugin, String uuidStr, int value) {
+    public static void updateDisplayNumber(AstraRS plugin, String uuidStr, String value) {
         if (uuidStr == null || uuidStr.isEmpty()) return;
+
+        // Jeśli nie ma wartości (null lub pusta), dajemy po prostu zwykłe "0"
+        if (value == null || value.isEmpty()) {
+            value = "0";
+        }
 
         try {
             UUID uuid = UUID.fromString(uuidStr);
             Entity entity = Bukkit.getEntity(uuid);
 
             if (entity instanceof TextDisplay display) {
-                // Możesz tu poszaleć z kolorami, np. złoty dla liczb > 0
-                String color = (value > 0) ? "§f" : "§7";
-                display.setText(color + value);
+                display.setText("§f" + value);
             }
         } catch (Exception e) {
             // Ciche ignorowanie, jeśli UUID jest trefne
@@ -148,9 +174,6 @@ public class GateUtils {
 
         // 1. POBIERAMY TYP ZAPISANY W CONFIGU DLA TEJ ŚCIEŻKI
         String type = config.getString(path + ".type", "");
-
-        // 2. DEBUG (teraz zobaczysz co to za typ)
-        //Bukkit.broadcastMessage("§cDEBUG: " + type + " na " + path + " -> target: " + target.getX() + "," + target.getZ());
 
         // 3. BLOKADA - jeśli to kabel, wychodzimy ZANIM cokolwiek zmienimy
         if (type.equalsIgnoreCase("CABLE_DATA")) {

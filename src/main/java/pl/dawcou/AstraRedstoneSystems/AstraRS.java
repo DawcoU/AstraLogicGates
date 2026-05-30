@@ -1,6 +1,7 @@
 package pl.dawcou.AstraRedstoneSystems;
 
 import net.md_5.bungee.api.ChatColor;
+import org.bstats.bukkit.Metrics;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -39,6 +40,8 @@ public class AstraRS extends JavaPlugin implements CommandExecutor, TabCompleter
     private MemoryGates memoryGates;
     private TimeGates timeGates;
     private NumberGates numberGates;
+    private StringGates stringGates;
+    private DataGates dataGates;
     private SpaceGates spaceGates;
 
     private LanguageManager languageManager;
@@ -68,21 +71,26 @@ public class AstraRS extends JavaPlugin implements CommandExecutor, TabCompleter
 
     @Override
     public void onEnable() {
-        this.gateValidator = new GateValidator(this);
+        int pluginId = 31505;
+        Metrics metrics = new Metrics(this, pluginId);
+
+        this.gateValidator = new GateValidator();
         this.noticeManager = new NoticeManager(this);
         this.languageManager = new LanguageManager(this);
+
         this.basicGates = new BasicGates(this, gateValidator);
         this.memoryGates = new MemoryGates(this, gateValidator);
         this.timeGates = new TimeGates(this, gateValidator);
         this.numberGates = new NumberGates(this, gateValidator);
+        this.stringGates = new StringGates(this, gateValidator);
+        this.dataGates = new DataGates(this, gateValidator);
         this.spaceGates = new SpaceGates(this, gateValidator);
 
         SelectionManager selectionManager = new SelectionManager(this);
         FilesUpdater updater = new FilesUpdater(this);
         CommandManager commandHandler = new CommandManager (this, selectionManager);
 
-        GateConverter converter = new GateConverter(this);
-        converter.runAllMigrations();
+        new FilesConverter(this).runAllMigrations();
 
         saveDefaultConfig();
         createGatesConfig();
@@ -109,11 +117,11 @@ public class AstraRS extends JavaPlugin implements CommandExecutor, TabCompleter
 
         Bukkit.getGlobalRegionScheduler().runAtFixedRate(this, (task) -> {
 
-            GateUtils.syncLinks(this);
-
             // 2. Bardzo ważna kolejność!
-            // Najpierw źródła liczb, potem kable, na końcu reszta.
-            numberGates.runNumberGates(); // Tu siedzą Number_gate i CABLE_DATA
+            // Najpierw źródła liczb, potem kable, na końcu reszta
+            numberGates.runNumberGates();
+            stringGates.runStringGates();
+            dataGates.runDataGates();
 
             basicGates.runBasicGates();
             memoryGates.runMemoryGates();
@@ -126,12 +134,18 @@ public class AstraRS extends JavaPlugin implements CommandExecutor, TabCompleter
             saveGates();
         }, 1200L, 1200L);
 
-        noticeManager.sendStartupLogo();
-
+        // Odpalamy scheduler asynchroniczny, który najpierw sprawdzi internet, a na koniec wypluje logo i status wersji!
         this.getServer().getAsyncScheduler().runNow(this, task -> {
-            if (getConfig().getBoolean("check-updates", true)) {
+
+            // Najpierw sprawdzamy aktualizacje, jeśli opcja jest włączona
+            if (getConfig().getBoolean("settings.check-updates", true)) {
                 new UpdateChecker(this).getVersion(version -> {
                     String currentVersion = this.getDescription().getVersion();
+
+                    // 1. NAJPIERW DRUKUJEMY LOGO (Zawsze jako pierwsze, niezależnie od wyniku sieci)
+                    noticeManager.sendStartupLogo();
+
+                    // 2. ZARAZ POD LOGO DORZUCAMY INFO O WERSJI
                     if (currentVersion.equals(version)) {
                         noticeManager.sendVersionOk(version);
                     } else if (currentVersion.compareTo(version) > 0) {
@@ -140,6 +154,9 @@ public class AstraRS extends JavaPlugin implements CommandExecutor, TabCompleter
                         noticeManager.sendUpdateNotice(Bukkit.getConsoleSender(), version);
                     }
                 });
+            } else {
+                // Jeśli admin wyłączył sprawdzanie aktualizacji, po prostu drukujemy samo logo!
+                noticeManager.sendStartupLogo();
             }
         });
     }
@@ -193,7 +210,7 @@ public class AstraRS extends JavaPlugin implements CommandExecutor, TabCompleter
             Material mat = switch (category) {
                 case "logic" -> switch (type) {
                     case "NOT", "NOR" -> Material.RED_CONCRETE;
-                    case "AND", "OR", "BUFFER" -> Material.YELLOW_CONCRETE;
+                    case "AND", "OR", "BUFFER", "PULSER" -> Material.YELLOW_CONCRETE;
                     case "NAND", "XNOR", "NIMPLY" -> Material.ORANGE_CONCRETE;
                     case "XOR", "IMPLY", "MUX" -> Material.LIME_CONCRETE;
                     case "SYNCHRONIZER" -> Material.BROWN_CONCRETE;
@@ -206,13 +223,24 @@ public class AstraRS extends JavaPlugin implements CommandExecutor, TabCompleter
                     default -> null;
                 };
                 case "numbers" -> switch (type) {
-                    case "MATH" -> Material.BLUE_CONCRETE;
+                    case "MATH", "DECIMAL_ACCUMULATOR" -> Material.BLUE_CONCRETE;
                     case "COUNTER" -> Material.LIGHT_GRAY_CONCRETE;
                     case "COMPARATOR", "DECODER" -> Material.GRAY_CONCRETE;
-                    case "CABLE_DATA" -> Material.BLACK_CONCRETE;
                     case "RANDOM_BOOLEAN", "RANDOM_NUMBER" -> Material.CYAN_CONCRETE;
-                    case "NUMBER_GATE", "BOOLEAN_GATE", "VARIABLE_GATE" -> Material.BROWN_CONCRETE;
+                    case "NUMBER_GATE", "BOOLEAN_GATE" -> Material.BROWN_CONCRETE;
+                    default -> null;
+                };
+                case "string" -> switch (type) {
+                    case "STRING_COMPARATOR", "STRING_DECODER" -> Material.GRAY_CONCRETE;
+                    case "STRING_GATE" -> Material.BROWN_CONCRETE;
+                    default -> null;
+                };
+                case "data" -> switch (type) {
+                    case "CABLE_DATA" -> Material.BLACK_CONCRETE;
                     case "DISPLAY" -> Material.WHITE_CONCRETE;
+                    case "TRANSISTOR" -> Material.RED_CONCRETE;
+                    case "VARIABLE_GATE" -> Material.LIGHT_BLUE_CONCRETE;
+                    case "BATTERY" -> Material.ORANGE_CONCRETE;
                     default -> null;
                 };
                 case "space" -> switch (type) {
@@ -430,6 +458,38 @@ public class AstraRS extends JavaPlugin implements CommandExecutor, TabCompleter
                 }
 
                 lore.add("§7Czas: §f" + input);
+
+            } else if (type.equals("STRING_GATE") || type.equals("STRING_DECODER")) {
+                if (args.length < 3) {
+                    player.sendMessage(this.getLanguageManager().getWithPrefix("provide-text"));
+                    return true;
+                }
+
+                // Łączymy wszystkie argumenty od args[2] wzwyż
+                StringBuilder sb = new StringBuilder();
+                for (int i = 2; i < args.length; i++) {
+                    sb.append(args[i]).append(" ");
+                }
+                String textValue = sb.toString().trim();
+
+                // Normalny, uniwersalny tekst dla obu bramek
+                lore.add("§7Tekst: §f" + textValue);
+
+            } else if (type.equals("STRING_COMPARATOR")) {
+                if (args.length < 3) {
+                    player.sendMessage(this.getLanguageManager().getWithPrefix("provide-string-mode"));
+                    return true;
+                }
+
+                String mode = args[2].toUpperCase();
+
+                // Sprawdzamy czy gracz wpisał poprawny tryb dla tekstu
+                if (!mode.matches("==|EQUALS|EQUALS_IGNORE_CASE|=I|CONTAINS|STARTS_WITH|ENDS_WITH|EMPTY")) {
+                    player.sendMessage(this.getLanguageManager().getWithPrefix("invalid-string-sign"));
+                    return true;
+                }
+
+                lore.add("§7Tryb: §f" + mode);
             }
 
             meta.setLore(lore);
@@ -446,16 +506,20 @@ public class AstraRS extends JavaPlugin implements CommandExecutor, TabCompleter
         List<String> hints = new ArrayList<>();
         if (command.getName().equalsIgnoreCase("bramka")) {
             if (args.length == 1) {
-                Arrays.asList("logic", "memory", "numbers", "space", "time").forEach(c -> {
+                Arrays.asList("logic", "memory", "numbers", "string", "data", "space", "time").forEach(c -> {
                     if (c.startsWith(args[0].toLowerCase())) hints.add(c);
                 });
             } else if (args.length == 2) {
                 List<String> types = switch (args[0].toLowerCase()) {
                     case "logic" ->
-                            Arrays.asList("NOT", "AND", "OR", "NOR", "NAND", "XOR", "XNOR", "NIMPLY", "IMPLY", "BUFFER", "MUX", "SYNCHRONIZER");
+                            Arrays.asList("NOT", "AND", "OR", "NOR", "NAND", "XOR", "XNOR", "NIMPLY", "IMPLY", "BUFFER", "MUX", "SYNCHRONIZER", "PULSER");
                     case "memory" -> Arrays.asList("LATCH", "TFF", "MEMORY_CELL", "MEMORY_READ");
                     case "numbers" ->
-                            Arrays.asList("COUNTER", "RANDOM_BOOLEAN", "RANDOM_NUMBER", "NUMBER_GATE", "BOOLEAN_GATE", "VARIABLE_GATE", "MATH", "COMPARATOR", "DECODER", "LINKER", "CABLE_DATA", "DISPLAY");
+                            Arrays.asList("COUNTER", "RANDOM_BOOLEAN", "RANDOM_NUMBER", "NUMBER_GATE", "BOOLEAN_GATE", "MATH", "DECIMAL_ACCUMULATOR", "COMPARATOR", "DECODER");
+                    case "string" ->
+                            Arrays.asList("STRING_GATE", "STRING_COMPARATOR", "STRING_DECODER");
+                    case "data" ->
+                            Arrays.asList("CABLE_DATA", "DISPLAY", "TRANSISTOR", "VARIABLE_GATE", "BATTERY");
                     case "space" -> Arrays.asList("SENDER", "RECEIVER", "SENSOR");
                     case "time" -> Arrays.asList("CLOCK", "CLOCK_GATE", "REPEATER");
                     default -> Collections.emptyList();
@@ -468,6 +532,7 @@ public class AstraRS extends JavaPlugin implements CommandExecutor, TabCompleter
                 if (type.matches("CLOCK|CLOCK_GATE|REPEATER")) hints.addAll(Arrays.asList("10t", "1s"));
                 else if (type.equals("MATH")) hints.addAll(Arrays.asList("+", "-", "x", "/", "^"));
                 else if (type.equals("COMPARATOR")) hints.addAll(Arrays.asList(">", "<", "==", "!=", ">=", "<="));
+                else if (type.equals("STRING_COMPARATOR")) hints.addAll(Arrays.asList("==", "EQUALS", "EQUALS_IGNORE_CASE", "=I", "CONTAINS", "STARTS_WITH", "ENDS_WITH", "EMPTY"));
                 else if (type.equals("SENSOR")) hints.add("5");
                 else if (type.equals("COUNTER")) hints.add("10");
                 else if (type.equals("NUMBER_GATE")) hints.add("1");

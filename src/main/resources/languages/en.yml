@@ -13,13 +13,16 @@ messages:
 
   # Messages from /bramka command
   need-channel: "&cYou must specify a channel! <channel1,channel2...>"
-  provide-limit: "&cPlease specify a limit (1-100)!"
+  provide-limit: "&cPlease specify a limit!"
   provide-value: "&cPlease specify a value!"
+  provide-text: "&cProvide text!"
   provide-range2: "&cProvide a range!"
   wrong-format: "&cWrong format! Use: min-max (e.g., 0-10)"
   provide-mode: "&cPlease specify a mode!"
   provide-sign: "&cEnter a sign! (>, <, ==, !=, >=, <=)"
+  provide-string-mode: "&cEnter a character! (==, EQUALS, EQUALS_IGNORE_CASE,=I, CONTAINS, STARTS_WITH, ENDS_WITH, EMPTY)"
   invalid-sign: "&cThis is not a valid mathematical operator!"
+  invalid-string-sign: "&cThis is not a valid string operator!"
   negative-number: "&cYou cannot enter a negative number!"
   min-greater-than-max: "&cThe min number cannot be greater than the max number!"
   not-a-number: "&cThis is not a number!"
@@ -34,15 +37,7 @@ messages:
   ticks-range-reapeter: "&cTime in ticks must be between 1t and 200t (10s)!"
   seconds-range: "&cTime in seconds must be between 1s and 10s!"
 
-  # Messages from linker
-  link-no-block: "&cYou must be looking at the gateway block!"
-  link-not-gate: "&cThis block is not a registered gateway!"
-  link-step-1: "&aSource selected, &bNow look at the destination and try again."
-  link-step-2: "&eConnected Successfully!"
-  link-already-exists: "&cThis gateway is already connected!"
-  unlink-success: "&aAll outgoing connections removed!"
-
-  # Messages from GateListener (Interactions & Breaking)
+  # Gateway Interaction Messages
   gate-removed: "&6{TYPE} &cgate has been removed!"
   power-block-break-deny: "&cThis block is powering a gate output!"
   gate-placed: "&aPlaced &e{TYPE} &agate. &6Output: &e{OUT}"

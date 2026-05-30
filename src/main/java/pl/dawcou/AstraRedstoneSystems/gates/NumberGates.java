@@ -1,8 +1,6 @@
 package pl.dawcou.AstraRedstoneSystems.gates;
 
-import org.bukkit.Color;
 import org.bukkit.Location;
-import org.bukkit.Particle;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.configuration.ConfigurationSection;
@@ -27,8 +25,9 @@ public class NumberGates {
         FileConfiguration config = plugin.getGatesConfig();
         ConfigurationSection gatesSection = config.getConfigurationSection("gates");
         if (gatesSection == null) return;
-        // Pobieramy flagę debugowania raz dla całego cyklu przetwarzania
-        boolean debug = plugin.getConfig().getBoolean("debug-mode", false);
+
+        boolean debug = plugin.getConfig().getBoolean("settings.debug-mode", false);
+        String prefix = "§8[§bAstraRedstoneSystems§8] §7[§dDebug§7] ";
 
         for (String key : gatesSection.getKeys(false)) {
             String path = "gates." + key;
@@ -40,47 +39,33 @@ public class NumberGates {
             Block gate = loc.getBlock();
             String type = config.getString(path + ".type", "").toUpperCase();
 
-            // --- DEKLARUJEMY ZMIENNE JAKO NULL ---
-            BlockFace out = null;
-            BlockFace back = null;
-            BlockFace s1 = null;
-            BlockFace s2 = null;
-            Block target = null;
+            if (!type.matches("NUMBER_GATE|COUNTER|BOOLEAN_GATE|MATH|COMPARATOR|DECODER|RANDOM_BOOLEAN|RANDOM_NUMBER|DECIMAL_ACCUMULATOR")) continue;
 
-            // --- INICJALIZUJEMY JE TYLKO JEŚLI TO NIE KABEL ---
-            if (!type.equals("CABLE_DATA")) {
-                String outName = config.getString(path + ".out", "NORTH");
-                out = BlockFace.valueOf(outName.toUpperCase());
-                back = out.getOppositeFace();
-                s1 = GateUtils.rotate90(out);
-                s2 = s1.getOppositeFace();
-                target = gate.getRelative(out);
-            }
+            // --- INICJALIZACJA KIERUNKÓW ---
+            String outName = config.getString(path + ".out", "NORTH");
+            BlockFace out = BlockFace.valueOf(outName.toUpperCase());
+            BlockFace back = out.getOppositeFace();
+            BlockFace s1 = GateUtils.rotate90(out);
+            BlockFace s2 = s1.getOppositeFace();
+            Block target = gate.getRelative(out);
 
             boolean currentState = config.getBoolean(path + ".state", false);
 
             // --- EFEKTY WIZUALNE STATUSU ---
 
             // 1. EFEKT WYJŚCIA (Wszystkie bramki logiczne oprócz kabla)
-            if (type.matches("NUMBER_GATE|VARIABLE_GATE|COUNTER|BOOLEAN_GATE|MATH|COMPARATOR|LINKER|DECODER|RANDOM_BOOLEAN|RANDOM_NUMBER")) {
+            if (type.matches("NUMBER_GATE|COUNTER|BOOLEAN_GATE|MATH|COMPARATOR|DECODER|RANDOM_BOOLEAN|RANDOM_NUMBER|DECIMAL_ACCUMULATOR")) {
                 GateUtils.spawnStatusParticle(gate, out, currentState);
             }
 
-            // 2. EFEKT WEJŚCIA Z TYŁU (Główne wejście danych/zasilania)
-            if (type.matches("NUMBER_GATE|VARIABLE_GATE|BOOLEAN_GATE|DECODER|RANDOM_BOOLEAN|RANDOM_NUMBER|LINKER|DISPLAY|COUNTER")) {
+            // 2. EFEKT WEJŚCIA Z TYŁU
+            if (type.matches("NUMBER_GATE|BOOLEAN_GATE|DECODER|RANDOM_BOOLEAN|RANDOM_NUMBER|COUNTER|DECIMAL_ACCUMULATOR")) {
                 boolean pBack = GateUtils.getPowerAt(gate.getRelative(back)) > 0;
-                // Specjalny check dla Linkera i Displaya - one czytają Twoje "current_out"
-                if (type.equals("LINKER") || type.equals("DISPLAY") || type.equals("COUNTER")) {
-                    // Pobieramy konkretną liczbę z bloku z tyłu
-                    int vBack = GateUtils.getDataFrom(gate.getRelative(back), back.getOppositeFace(), plugin);
 
-                    // Jeśli to DISPLAY, to odświeżamy napis nad bramką
-                    if (type.equals("DISPLAY")) {
-                        String uuidStr = config.getString(path + ".displayUUID");
-                        GateUtils.updateDisplayNumber(plugin, uuidStr, vBack);
-                    }
-
-                    // Particle świecą, jeśli jest jakakolwiek wartość lub prąd vanilla
+                // Dodajemy DECIMAL_ACCUMULATOR tutaj
+                if (type.equals("COUNTER") || type.equals("DECIMAL_ACCUMULATOR")) {
+                    int vBack = GateUtils.getNumberFrom(gate.getRelative(back), back.getOppositeFace(), plugin);
+                    // Świeci jeśli idzie liczba LUB prąd
                     GateUtils.spawnStatusParticle(gate, back, vBack > 0 || pBack);
                 } else {
                     GateUtils.spawnStatusParticle(gate, back, pBack);
@@ -88,32 +73,26 @@ public class NumberGates {
             }
 
             // 3. EFEKT WEJŚĆ BOCZNYCH
-            if (type.matches("COUNTER|MATH|COMPARATOR|LINKER")) {
-                // Blokujemy nazwy kierunków dla czytelności
+            if (type.matches("COUNTER|MATH|COMPARATOR|DECIMAL_ACCUMULATOR")) {
                 BlockFace faceL = s2;
                 BlockFace faceR = s1;
 
-                // LEWO (Dla Countera to wejście odejmujące --)
-                int vL;
-                if (type.equals("COUNTER") || type.equals("MATH")) {
-                    // Pobieramy pełne dane (np. z innej bramki)
-                    vL = GateUtils.getDataFrom(gate.getRelative(faceL), faceL.getOppositeFace(), plugin);
-                    // Jeśli nie ma danych z bramki, sprawdźmy zwykły redstone
-                    if (vL == 0) vL = GateUtils.getPowerAt(gate.getRelative(faceL));
-                } else {
-                    vL = GateUtils.getCustomOrRedstonePower(plugin, gate.getRelative(faceL));
-                }
-                GateUtils.spawnStatusParticle(gate, faceL, vL > 0);
+                if (type.equals("COUNTER") || type.equals("MATH") || type.equals("DECIMAL_ACCUMULATOR") || type.equals("COMPARATOR")) {
+                    // LEWO
+                    int vL = GateUtils.getNumberFrom(gate.getRelative(faceL), faceL.getOppositeFace(), plugin);
+                    if (vL == 0 || vL == Integer.MIN_VALUE) vL = GateUtils.getPowerAt(gate.getRelative(faceL));
+                    GateUtils.spawnStatusParticle(gate, faceL, vL > 0);
 
-                // PRAWO (Dla Countera to zazwyczaj RESET)
-                int vR;
-                if (type.equals("COUNTER") || type.equals("MATH")) {
-                    vR = GateUtils.getDataFrom(gate.getRelative(faceR), faceR.getOppositeFace(), plugin);
-                    if (vR == 0) vR = GateUtils.getPowerAt(gate.getRelative(faceR));
+                    // PRAWO
+                    int vR = GateUtils.getNumberFrom(gate.getRelative(faceR), faceR.getOppositeFace(), plugin);
+                    if (vR == 0 || vR == Integer.MIN_VALUE) vR = GateUtils.getPowerAt(gate.getRelative(faceR));
+                    GateUtils.spawnStatusParticle(gate, faceR, vR > 0);
+
                 } else {
-                    vR = GateUtils.getCustomOrRedstonePower(plugin, gate.getRelative(faceR));
+                    // Dla standardowych bramek (jeśli jakieś zostaną w przyszłości)
+                    GateUtils.spawnStatusParticle(gate, faceL, GateUtils.getCustomOrRedstonePower(plugin, gate.getRelative(faceL)) > 0);
+                    GateUtils.spawnStatusParticle(gate, faceR, GateUtils.getCustomOrRedstonePower(plugin, gate.getRelative(faceR)) > 0);
                 }
-                GateUtils.spawnStatusParticle(gate, faceR, vR > 0);
             }
 
             // --- LOGIKA BRAMEK ---
@@ -121,112 +100,45 @@ public class NumberGates {
                 case "NUMBER_GATE" -> {
                     boolean pBack = GateUtils.getPowerAt(gate.getRelative(back)) > 0;
                     int storedValue = config.getInt(path + ".value", 0);
-                    int finalValue = pBack ? storedValue : 0;
-                    int lastOut = config.getInt(path + ".current_out", -1);
 
-                    if (finalValue != lastOut) {
-                        if (debug) plugin.getLogger().info("[AstraDebug] NUMBER_GATE na " + key + " stan: " + finalValue);
-                        config.set(path + ".current_out", finalValue);
+                    // LOGIKA: Jeśli OFF -> Integer.MIN_VALUE, Jeśli ON -> storedValue
+                    int valToSend = pBack ? storedValue : Integer.MIN_VALUE;
+                    String currentResStr = String.valueOf(valToSend);
+
+                    String lastOutStr = config.getString(path + ".current_out", String.valueOf(Integer.MIN_VALUE));
+
+                    if (!currentResStr.equals(lastOutStr)) {
+                        config.set(path + ".current_out", currentResStr);
                         config.set(path + ".state", pBack);
+                        // GateUtils musi umieć odebrać inta i przekazać go dalej
                         GateUtils.updateOutput(plugin, path, target, pBack);
                     }
                 }
 
-                case "VARIABLE_GATE" -> {
-                    // 1. Sprawdzamy boki (S1 i S2) pod kątem sygnału Reset
-                    boolean reset = GateUtils.getPowerAt(gate.getRelative(s1)) > 0 || GateUtils.getPowerAt(gate.getRelative(s2)) > 0;
+                case "BOOLEAN_GATE" -> {
+                    boolean hasPower = GateUtils.getPowerAt(gate.getRelative(back)) > 0;
+                    int valueToSend = hasPower ? 1 : 0;
 
-                    if (reset) {
-                        // Siłowe czyszczenie wszystkiego
-                        config.set(path + ".value", 0);
-                        config.set(path + ".current_out", 0);
-                        if (config.getBoolean(path + ".state", false)) {
-                            config.set(path + ".state", false);
-                            GateUtils.updateOutput(plugin, path, target, false);
-                        }
-                        if (debug) plugin.getLogger().info("[AstraDebug] VARIABLE " + key + " został ZRESETOWANY boczny sygnałem.");
-                        return; // Przerywamy, nie sprawdzamy wejścia z tyłu w tym cyklu
-                    }
+                    // 1. Przygotowujemy uniwersalny String systemowy
+                    String currentResStr = String.valueOf(valueToSend);
 
-                    // 2. Pobieramy dane z wejścia (tył)
-                    int incoming = GateUtils.getDataFrom(gate.getRelative(back), back.getOppositeFace(), plugin);
-                    int currentStored = config.getInt(path + ".value", 0);
+                    // 2. Pobieramy poprzednią wartość jako STRING (konsekwentnie!)
+                    String lastOutStr = config.getString(path + ".current_out", "");
 
-                    // 3. Logika "Zatrzymania" (Latch)
-                    // Zapisujemy nową wartość TYLKO jeśli jest większa od 0
-                    if (incoming > 0) {
-                        if (incoming != currentStored) {
-                            config.set(path + ".value", incoming);
-                            currentStored = incoming;
-                            if (debug) plugin.getLogger().info("[AstraDebug] VARIABLE " + key + " zapisała nową wartość: " + incoming);
-                        }
-                    }
+                    // 3. Porównujemy String z Stringiem, żeby uniknąć wiecznej pętli
+                    if (!currentResStr.equals(lastOutStr)) {
 
-                    // 4. Logika wyjścia - zawsze wypuszczaj to, co masz "wgrane"
-                    boolean hasState = currentStored > 0;
-                    boolean previousState = config.getBoolean(path + ".state", false);
-
-                    if (hasState != previousState) {
-                        config.set(path + ".state", hasState);
-                        GateUtils.updateOutput(plugin, path, target, hasState);
-                    }
-
-                    // Synchronizacja dla innych bramek (np. Display czy Math)
-                    if (currentStored != config.getInt(path + ".current_out", -1)) {
-                        config.set(path + ".current_out", currentStored);
-                    }
-                }
-
-                case "CABLE_DATA" -> {
-                    int bestValue = 0;
-                    int maxPower = 0;
-                    int myCurrentPower = config.getInt(path + ".power", 0);
-
-                    for (BlockFace face : BlockFace.values()) {
-                        if (!face.isCartesian()) continue;
-                        Block neighbor = gate.getRelative(face);
-                        String neighborPath = "gates." + GateUtils.locToStr(neighbor.getLocation());
-
-                        if (!config.contains(neighborPath)) continue;
-                        String nType = config.getString(neighborPath + ".type", "");
-                        int incoming = GateUtils.getDataFrom(neighbor, face.getOppositeFace(), plugin);
-
-                        int neighborPower;
-                        if (!nType.equals("CABLE_DATA")) {
-                            // 1. Jeśli to BRAMKA - ona ma zawsze moc 100
-                            String nOutStr = config.getString(neighborPath + ".out", "NORTH");
-                            BlockFace nOut = BlockFace.valueOf(nOutStr.toUpperCase());
-                            if (neighbor.getRelative(nOut).getLocation().equals(gate.getLocation())) {
-                                neighborPower = 100;
-                            } else {
-                                neighborPower = 0;
-                            }
-                        } else {
-                            // 2. Jeśli to KABEL - pobieramy jego aktualną moc
-                            neighborPower = config.getInt(neighborPath + ".power", 0);
+                        if (debug) {
+                            org.bukkit.Bukkit.getConsoleSender().sendMessage(
+                                    prefix + "§3BOOLEAN_GATE §7na §e" + key + " §7-> Stan: " + (hasPower ? "§aWŁĄCZONY (1)" : "§cWYŁĄCZONY (0)")
+                            );
                         }
 
-                        // BIERZEMY SYGNAŁ TYLKO OD SILNIEJSZEGO SĄSIADA
-                        // To klucz do braku migania i braku pętli!
-                        if (neighborPower > maxPower) {
-                            maxPower = neighborPower;
-                            bestValue = incoming;
-                        }
-                    }
+                        // Zapisujemy jako String – bezpiecznie dla reszty sieci kabli danych
+                        config.set(path + ".current_out", currentResStr);
+                        config.set(path + ".state", hasPower);
 
-                    // Obliczamy naszą nową moc (zawsze o 1 mniej niż źródło)
-                    int newPower = Math.max(0, maxPower - 1);
-
-                    // Aktualizujemy tylko jeśli coś się zmieniło, żeby nie marnować procesora
-                    if (bestValue != config.getInt(path + ".current_out", 0) || newPower != myCurrentPower) {
-                        config.set(path + ".current_out", bestValue);
-                        config.set(path + ".power", newPower); // Zapisujemy moc do stabilizacji
-                    }
-
-                    // Efekty cząsteczkowe
-                    if (bestValue > 0) {
-                        Location pLoc = gate.getLocation().clone().add(0.5, 1.1, 0.5);
-                        gate.getWorld().spawnParticle(Particle.REDSTONE, pLoc, 1, 0.1, 0, 0.1, 0, new Particle.DustOptions(Color.AQUA, 1.0F));
+                        GateUtils.updateOutput(plugin, path, target, hasPower);
                     }
                 }
 
@@ -235,8 +147,12 @@ public class NumberGates {
                     BlockFace left = right.getOppositeFace();
 
                     // --- POBIERANIE DANYCH ---
-                    int dataBack = GateUtils.getDataFrom(gate.getRelative(back), back.getOppositeFace(), plugin);
-                    int dataLeft = GateUtils.getDataFrom(gate.getRelative(left), left.getOppositeFace(), plugin);
+                    int dataBack = GateUtils.getNumberFrom(gate.getRelative(back), back.getOppositeFace(), plugin);
+                    int dataLeft = GateUtils.getNumberFrom(gate.getRelative(left), left.getOppositeFace(), plugin);
+
+                    // NORMALIZACJA:
+                    if (dataBack == Integer.MIN_VALUE) dataBack = 0;
+                    if (dataLeft == Integer.MIN_VALUE) dataLeft = 0;
 
                     boolean pB = GateUtils.getPowerAt(gate.getRelative(back)) > 0;
                     boolean pL = GateUtils.getPowerAt(gate.getRelative(left)) > 0;
@@ -254,24 +170,20 @@ public class NumberGates {
                     boolean changed = false;
 
                     // --- LOGIKA: DODAWANIE (TYŁ) ---
-                    // A) Przez wysłanie liczby (dodaje różnicę)
                     if (dataBack > lastDataBack) {
                         count = Math.min(limit, count + (dataBack - lastDataBack));
                         changed = true;
                     }
-                    // B) Przez impuls Redstone (+1)
                     else if (pB && !lB && count < limit) {
                         count++;
                         changed = true;
                     }
 
                     // --- LOGIKA: ODEJMOWANIE (LEWO) ---
-                    // A) Przez wysłanie liczby (odejmuje różnicę)
                     if (dataLeft > lastDataLeft) {
                         count = Math.max(0, count - (dataLeft - lastDataLeft));
                         changed = true;
                     }
-                    // B) Przez impuls Redstone (-1)
                     else if (pL && !lL && count > 0) {
                         count--;
                         changed = true;
@@ -294,10 +206,16 @@ public class NumberGates {
                             config.set(path + ".state", finalState);
                             GateUtils.updateOutput(plugin, path, target, finalState);
                         }
+
+                        if (debug) {
+                            org.bukkit.Bukkit.getConsoleSender().sendMessage(
+                                    prefix + "§5COUNTER §7na §e" + key + " §7-> Nowy stan licznika: §d§l" + count + "§7/§5" + limit
+                            );
+                        }
                     }
 
-                    // Zapisujemy stany do następnego sprawdzenia
-                    config.set(path + ".current_out", count); // Dla innych bramek
+                    String countStr = String.valueOf(count);
+                    config.set(path + ".current_out", countStr);
                     config.set(path + ".last_data_back", dataBack);
                     config.set(path + ".last_data_left", dataLeft);
                     config.set(path + ".last_back", pB);
@@ -305,41 +223,99 @@ public class NumberGates {
                     config.set(path + ".last_right", pR);
                 }
 
-                case "BOOLEAN_GATE" -> {
-                    boolean hasPower = GateUtils.getPowerAt(gate.getRelative(back)) > 0;
-                    int valueToSend = hasPower ? 1 : 0;
-                    int lastOut = config.getInt(path + ".current_out", -1);
-
-                    if (valueToSend != lastOut) {
-                        if (debug) plugin.getLogger().info("[AstraDebug] BOOLEAN " + key + " przesyła: " + valueToSend);
-                        config.set(path + ".current_out", valueToSend);
-                        config.set(path + ".state", hasPower);
-                        GateUtils.updateOutput(plugin, path, target, hasPower);
-                    }
-                }
-
                 case "MATH" -> {
                     BlockFace right = GateUtils.rotate90(out);
                     BlockFace left = right.getOppositeFace();
 
-                    int vL = GateUtils.getDataFrom(gate.getRelative(left), left.getOppositeFace(), plugin);
-                    int vR = GateUtils.getDataFrom(gate.getRelative(right), right.getOppositeFace(), plugin);
+                    int vL_raw = GateUtils.getNumberFrom(gate.getRelative(left), left.getOppositeFace(), plugin);
+                    int vR_raw = GateUtils.getNumberFrom(gate.getRelative(right), right.getOppositeFace(), plugin);
+
+                    int vL = (vL_raw == Integer.MIN_VALUE) ? 0 : vL_raw;
+                    int vR = (vR_raw == Integer.MIN_VALUE) ? 0 : vR_raw;
+
                     String m = config.getString(path + ".mode", "ADD").toUpperCase();
 
-                    int result = switch (m) {
-                        case "SUB", "-" -> Math.max(0, vL - vR);
-                        case "MUL", "*" -> vL * vR;
-                        case "DIV", "/" -> (vR != 0) ? (vL / vR) : 0;
-                        case "POW", "^" -> (int) Math.pow(vL, vR);
-                        default -> vL + vR;
+                    // Używamy LONG do bezpiecznych obliczeń
+                    long calc = switch (m) {
+                        case "SUB", "-" -> (long) vL - vR;
+                        case "MUL", "*" -> (long) vL * vR;
+                        case "DIV", "/" -> (vR != 0) ? (long) vL / vR : 0;
+                        case "POW", "^" -> (long) Math.pow(vL, vR);
+                        default -> (long) vL + vR;
                     };
 
-                    int lastRes = config.getInt(path + ".current_out", -1);
-                    if (result != lastRes) {
-                        if (debug) plugin.getLogger().info("[AstraDebug] MATH " + key + " wynik (" + m + "): " + result);
-                        config.set(path + ".current_out", result);
-                        config.set(path + ".state", result > 0);
-                        GateUtils.updateOutput(plugin, path, target, result > 0);
+                    // CLAMPING: Jeśli wynik jest poza zakresem INT, ustawiamy na granice
+                    int result;
+                    if (calc > Integer.MAX_VALUE) result = Integer.MAX_VALUE;
+                    else if (calc < Integer.MIN_VALUE) result = Integer.MIN_VALUE; // Lub np. 0, jeśli wolisz
+                    else result = (int) calc;
+
+                    // Odczytujemy jako String. Domyślnie "" (pusty string to "brak wyniku")
+                    String lastRes = config.getString(path + ".current_out", "");
+                    String currentResStr = String.valueOf(result);
+
+                    if (!currentResStr.equals(lastRes)) {
+                        if (debug) {
+                            org.bukkit.Bukkit.getConsoleSender().sendMessage(
+                                    prefix + "§d§lMATH §e" + key + " §7wynik: §a§l" + result
+                            );
+                        }
+                        config.set(path + ".current_out", currentResStr);
+                        // Aktywna, jeśli wynik to cokolwiek poza 0 (zależnie od Twoich preferencji)
+                        boolean isActive = (result != 0);
+                        config.set(path + ".state", isActive);
+                        GateUtils.updateOutput(plugin, path, target, isActive);
+                    }
+                }
+
+                case "DECIMAL_ACCUMULATOR" -> {
+                    BlockFace right = GateUtils.rotate90(out);
+                    BlockFace left = right.getOppositeFace();
+
+                    boolean resetL = GateUtils.getPowerAt(gate.getRelative(left)) > 0;
+                    boolean resetR = GateUtils.getPowerAt(gate.getRelative(right)) > 0;
+
+                    // Pobieramy wartość
+                    int inputVal = GateUtils.getNumberFrom(gate.getRelative(back), back.getOppositeFace(), plugin);
+
+                    // 1. Reset
+                    if (resetL || resetR) {
+                        config.set(path + ".current_out", "0");
+                        config.set(path + ".last_input", Integer.MIN_VALUE);
+                        config.set(path + ".state", true);
+                        GateUtils.updateOutput(plugin, path, target, true);
+                    }
+
+                    // 2. Logika APPEND
+                    else {
+                        // Pobieramy ostatni stan (domyślnie brak sygnału)
+                        int lastInput = config.getInt(path + ".last_input", Integer.MIN_VALUE);
+
+                        if (inputVal >= 0 && inputVal <= 9) {
+                            if (lastInput == Integer.MIN_VALUE) {
+
+                                String lastRes = config.getString(path + ".current_out", "0");
+                                int currentVal = 0;
+                                try {
+                                    currentVal = Integer.parseInt(lastRes);
+                                } catch (Exception e) {
+                                    currentVal = 0;
+                                }
+
+                                int result = (currentVal * 10) + inputVal;
+
+                                config.set(path + ".current_out", String.valueOf(result));
+                                config.set(path + ".state", true);
+                                GateUtils.updateOutput(plugin, path, target, true);
+
+                                // Zapisujemy, że ten sygnał został już przetworzony
+                                config.set(path + ".last_input", inputVal);
+                            }
+                        }
+                        // Jeśli sygnał zniknął, resetujemy "last_input", żeby pozwolić na kolejny impuls
+                        else if (inputVal == Integer.MIN_VALUE) {
+                            config.set(path + ".last_input", Integer.MIN_VALUE);
+                        }
                     }
                 }
 
@@ -347,60 +323,70 @@ public class NumberGates {
                     BlockFace right = GateUtils.rotate90(out);
                     BlockFace left = right.getOppositeFace();
 
-                    int vL = GateUtils.getDataFrom(gate.getRelative(left), left.getOppositeFace(), plugin);
-                    int vR = GateUtils.getDataFrom(gate.getRelative(right), right.getOppositeFace(), plugin);
+                    int vL = GateUtils.getNumberFrom(gate.getRelative(left), left.getOppositeFace(), plugin);
+                    int vR = GateUtils.getNumberFrom(gate.getRelative(right), right.getOppositeFace(), plugin);
+
+                    // Jeśli lewe wejście (dane) to MIN_VALUE, od razu gasimy wyjście
+                    if (vL == Integer.MIN_VALUE) {
+                        if (!"MIN_VALUE".equals(config.getString(path + ".current_out", ""))) {
+                            config.set(path + ".current_out", "MIN_VALUE");
+                            config.set(path + ".state", false);
+                            // Przekazujemy false, bo brak danych = brak sygnału
+                            GateUtils.updateOutput(plugin, path, target, false);
+                        }
+                        return;
+                    }
+
+                    int valR = (vR == Integer.MIN_VALUE) ? 0 : vR;
                     String m = config.getString(path + ".mode", "==");
 
                     boolean result = switch (m) {
-                        case ">" -> vL > vR;
-                        case "<" -> vL < vR;
-                        case "==" -> vL == vR;
-                        case ">=" -> vL >= vR;
-                        case "<=" -> vL <= vR;
-                        case "!=" -> vL != vR;
-                        default -> false;
+                        case ">"  -> vL > valR;
+                        case "<"  -> vL < valR;
+                        case "==" -> vL == valR;
+                        case ">=" -> vL >= valR;
+                        case "<=" -> vL <= valR;
+                        case "!=" -> vL != valR;
+                        default   -> false;
                     };
 
-                    int finalVal = result ? 1 : 0;
-                    int lastOut = config.getInt(path + ".current_out", -1);
-                    if (finalVal != lastOut) {
-                        if (debug) plugin.getLogger().info("[AstraDebug] COMP " + key + " wynik: " + result);
-                        config.set(path + ".current_out", finalVal);
+                    int finalVal = result ? vL : Integer.MIN_VALUE;
+                    String currentResStr = String.valueOf(finalVal);
+                    String lastOutStr = config.getString(path + ".current_out", "");
+
+                    if (!currentResStr.equals(lastOutStr)) {
+                        if (debug) {
+                            String compColor = result ? "§a" : "§c";
+                            org.bukkit.Bukkit.getConsoleSender().sendMessage(
+                                    prefix + "§2COMPARATOR §7na §e" + key + " §7wynik (§6" + m + "§7): " + compColor + (result ? "TRUE" : "FALSE")
+                            );
+                        }
+                        config.set(path + ".current_out", currentResStr);
                         config.set(path + ".state", result);
+
+                        // POPRAWKA: Przekazujemy wynik logiczny (true/false) do metody Redstone'a
                         GateUtils.updateOutput(plugin, path, target, result);
                     }
                 }
 
-                case "LINKER" -> {
-                    // Dane płyną z TYŁU
-                    int incomingValue = GateUtils.getDataFrom(gate.getRelative(back), back.getOppositeFace(), plugin);
-
-                    // Blokada z BOKÓW (lewy lub prawy)
-                    int blockL = GateUtils.getCustomOrRedstonePower(plugin, gate.getRelative(s2)); // Lewo
-                    int blockR = GateUtils.getCustomOrRedstonePower(plugin, gate.getRelative(s1)); // Prawo
-
-                    // Jeśli którykolwiek bok ma prąd, wynik to 0. Jeśli nie - puszczamy tył.
-                    int result = (blockL > 0 || blockR > 0) ? 0 : incomingValue;
-
-                    int lastOut = config.getInt(path + ".current_out", -1);
-                    if (result != lastOut) {
-                        if (debug) plugin.getLogger().info("[AstraDebug] LINKER " + key + " (Input: " + incomingValue + ") Blokada: " + (result == 0 && incomingValue > 0));
-                        config.set(path + ".current_out", result);
-                        config.set(path + ".state", result > 0);
-                        GateUtils.updateOutput(plugin, path, target, result > 0);
-                    }
-                }
-
                 case "DECODER" -> {
-                    int incoming = GateUtils.getDataFrom(gate.getRelative(back), back.getOppositeFace(), plugin);
+                    int incoming = GateUtils.getNumberFrom(gate.getRelative(back), back.getOppositeFace(), plugin);
                     int targetValue = config.getInt(path + ".value", 0);
                     boolean isMatch = (incoming == targetValue && incoming != 0);
                     int finalVal = isMatch ? 1 : 0;
 
-                    int lastOut = config.getInt(path + ".current_out", -1);
-                    if (finalVal != lastOut) {
-                        if (debug) plugin.getLogger().info("[AstraDebug] DECODER " + key + " (szuka: " + targetValue + ") otrzymał: " + incoming);
-                        config.set(path + ".current_out", finalVal);
+                    // 🔥 ZMIANA: Pełna konwersja na String przy zapisie i odczycie
+                    String currentResStr = String.valueOf(finalVal);
+                    String lastOutStr = config.getString(path + ".current_out", "");
+
+                    if (!currentResStr.equals(lastOutStr)) {
+                        if (debug) {
+                            String matchColor = isMatch ? "§aTRAFIONY" : "§cBRAK DOPASOWANIA";
+                            org.bukkit.Bukkit.getConsoleSender().sendMessage(
+                                    prefix + "§eDECODER §7na §e" + key + " §7(Szukał: §6" + targetValue + "§7) -> Status: " + matchColor + " §7(Dostał: §b" + incoming + "§7)"
+                            );
+                        }
+                        config.set(path + ".current_out", currentResStr);
                         config.set(path + ".state", isMatch);
                         GateUtils.updateOutput(plugin, path, target, isMatch);
                     }
@@ -415,26 +401,21 @@ public class NumberGates {
                                 ? (ThreadLocalRandom.current().nextBoolean() ? 1 : 0)
                                 : ThreadLocalRandom.current().nextInt(config.getInt(path + ".min", 0), config.getInt(path + ".max", 15) + 1);
 
-                        if (debug) plugin.getLogger().info("[AstraDebug] RANDOM " + key + " wylosował: " + result);
-                        config.set(path + ".current_out", result);
-                        config.set(path + ".state", result > 0);
-                        GateUtils.updateOutput(plugin, path, target, result > 0);
+                        // SYSTEMOWA POPRAWKA ZAPISU ORAZ STANU (Obsługuje liczby ujemne!)
+                        String currentResStr = String.valueOf(result);
+                        boolean isActive = (result != 0);
+
+                        if (debug) {
+                            org.bukkit.Bukkit.getConsoleSender().sendMessage(
+                                    prefix + "§a§lRANDOM §7[" + type + "] na §e" + key + " §7wylosował wartość: §b§l" + result
+                            );
+                        }
+
+                        config.set(path + ".current_out", currentResStr);
+                        config.set(path + ".state", isActive);
+                        GateUtils.updateOutput(plugin, path, target, isActive);
                     }
                     config.set(path + ".lastInput", in);
-                }
-
-                case "DISPLAY" -> {
-                    // 1. Odbieramy liczbę z tyłu Twoją metodą
-                    int val = GateUtils.getDataFrom(gate.getRelative(back), back.getOppositeFace(), plugin);
-
-                    // 2. Wyciągamy UUID wyświetlacza z configu
-                    String uuidStr = config.getString(path + ".displayUUID");
-
-                    // 3. Aktualizujemy napis (używamy Twojej nowej metody w GateUtils)
-                    GateUtils.updateDisplayNumber(plugin, uuidStr, val);
-
-                    // 4. Zapisujemy tę wartość jako wyjście bramki, żeby można było łączyć DISPLAY szeregowo
-                    config.set(path + ".current_out", val);
                 }
             }
         }

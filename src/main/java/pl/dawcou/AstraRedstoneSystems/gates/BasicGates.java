@@ -49,7 +49,7 @@ public class BasicGates {
             boolean pS2 = GateUtils.getPowerAt(gate.getRelative(s2)) > 0;
 
             // --- PARTICLE STATUSU ---
-            if (type.matches("OR|NOR|AND|NAND|XOR|XNOR|NOT|BUFFER|IMPLY|NIMPLY|MUX")) {
+            if (type.matches("OR|NOR|AND|NAND|XOR|XNOR|NOT|BUFFER|IMPLY|NIMPLY|MUX|PULSER")) {
                 GateUtils.spawnStatusParticle(gate, out, currentState);
             }
 
@@ -57,7 +57,7 @@ public class BasicGates {
                 GateUtils.spawnStatusParticle(gate, s1, pS1);
                 GateUtils.spawnStatusParticle(gate, s2, pS2);
             }
-            if (type.matches("NOT|BUFFER|NIMPLY|IMPLY|MUX")) {
+            if (type.matches("NOT|BUFFER|NIMPLY|IMPLY|MUX|PULSER")) {
                 GateUtils.spawnStatusParticle(gate, back, pBack);
             }
 
@@ -76,6 +76,24 @@ public class BasicGates {
                 case "NIMPLY" -> pBack && !(pS1 || pS2);
                 case "BUFFER" -> pBack;
                 case "MUX" -> pBack ? pS1 : pS2;
+                case "PULSER" -> {
+                    // Czytamy czysty prąd redstone / binarny z tyłu bramki
+                    boolean in = GateUtils.getPowerAt(gate.getRelative(back)) > 0;
+                    boolean lastIn = config.getBoolean(path + ".last_input_state", false);
+
+                    boolean result = false;
+
+                    // Wykrywamy tylko moment włączenia dźwigni (zbocze narastające)
+                    if (in && !lastIn) {
+                        result = true; // Impuls włączony tylko na ten 1 tick!
+                    }
+
+                    // Zapamiętujemy stan wejścia na kolejny tick
+                    config.set(path + ".last_input_state", in);
+
+                    // Zwracamy wynik do zmiennej newState
+                    yield result;
+                }
                 case "SYNCHRONIZER" -> {
                     boolean pA = GateUtils.getPowerAt(gate.getRelative(s1).getRelative(back)) > 0;
                     boolean pB = GateUtils.getPowerAt(gate.getRelative(s2).getRelative(back)) > 0;

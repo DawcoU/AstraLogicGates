@@ -13,13 +13,16 @@ messages:
 
   # Wiadomości z komendy /bramka
   need-channel: "&cMusisz podać kanał! <kanał1,kanał2...>"
-  provide-limit: "&cPodaj limit (1-100)!"
+  provide-limit: "&cPodaj limit!"
   provide-value: "&cPodaj wartość!"
+  provide-text: "&cPodaj tekst!"
   provide-range2: "&cPodaj zakres!"
   wrong-format: "&cZły format! Użyj: min-max (np. 0-10)"
   provide-mode: "&cPodaj tryb!"
   provide-sign: "&cPodaj znak! (>, <, ==, !=, >=, <=)"
+  provide-string-mode: "&cPodaj znak! (==, EQUALS, EQUALS_IGNORE_CASE,=I, CONTAINS, STARTS_WITH, ENDS_WITH, EMPTY)"
   invalid-sign: "&cTo nie jest prawidłowy operator matematyczny!"
+  invalid-string-sign: "&cTo nie jest prawidłowy operator tekstowy!"
   negative-number: "&cNie możesz wpisać liczby ujemnej!"
   min-greater-than-max: "&cLiczba min nie może być większa od liczby max!"
   not-a-number: "&cTo nie jest liczba!"
@@ -34,15 +37,7 @@ messages:
   ticks-range-reapeter: "&cCzas w tickach musi być od 1t do 200t (10s)!"
   seconds-range: "&cCzas w sekundach musi być od 1s do 10s!"
 
-  # Wiadomości z linkera
-  link-no-block: "&cMusisz patrzeć na blok bramki!"
-  link-not-gate: "&cTen blok nie jest zarejestrowaną bramką!"
-  link-step-1: "&aZaznaczono źródło, &bTeraz spójrz na cel i wpisz ponownie"
-  link-step-2: "&ePołączono Pomyślnie!"
-  link-already-exists: "&cTa bramka jest już połączona!"
-  unlink-success: "&aUsunięto wszystkie połączenia wychodzące!"
-
-  # Wiadomości z GateListener (Interakcje i niszczenie)
+  # Wiadomości z interacją bramek
   gate-removed: "&cBramka &6{TYPE} &czostała usunięta!"
   power-block-break-deny: "&cTo jest blok zasilający wyjście bramki!"
   gate-placed: "&aPostawiono bramkę &e{TYPE} &6Wyjście: &e{OUT}"

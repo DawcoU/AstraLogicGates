@@ -1,7 +1,7 @@
 # 🌌 AstraRedstoneSystems
 **Build complex redstone systems without cables using logic blocks, memory, timers, wireless signals and data processing.**
 
-Created and maintained by **DawcoU** 👨–
+Created and maintained by **DawcoU** 👨‍💻
 
 AstraRedstoneSystems is a powerful tool for technical players and map makers, allowing you to create complex Redstone mechanisms using dedicated logic blocks. Written in **Java 17** and optimized specifically for **Paper** (and its forks) to ensure maximum performance and tick-accuracy. ⚡
 
@@ -9,9 +9,9 @@ AstraRedstoneSystems is a powerful tool for technical players and map makers, al
 
 ### 🚀 Key Features
 * **Core Logic Gates:** Includes all basic gates like **NOT, AND, OR, XOR, NAND, NOR, XNOR**. 🧩
-* **Data Processing (NEW):** Advanced gates for math, variables, and comparisons. 🔢
-* **Wireless Data Link:** Transfer numbers and signals between gates without cables using `/alg link`. 🔗
-* **Memory & Timing:** RS-Latch, T-Flip-Flop, and enhanced repeaters with delays up to several seconds.
+* **Data Processing:** Advanced gates for math, variables, and comparisons. 🔢
+* **Wireless Data Link:** Transfer numbers and signals between gates without cables using `/alg link` or wireless channels. 🔗
+* **Memory & Timing:** RS-Latch, T-Flip-Flop, and enhanced repeaters with delays up to several seconds. ⏱️
 * **Long-Range Sensing:** Motion sensors that work at a distance. 📡
 
 ---
@@ -26,37 +26,63 @@ AstraRedstoneSystems is a powerful tool for technical players and map makers, al
 
 ---
 
-### 📖 How to use (Tutorial)
+### 📖 Full Gate List & Documentation
 
-**1. Basic Logic Gates:**
-* Use the command `/bramka <category> <type>` (e.g., `/bramka logic AND`) to receive a logic block.
-* Place the block on the ground. The output will face the **direction you were looking** when placing it.
-* **Input/Output Sides:** * **Back/Sides:** Inputs for signal or data.
-  * **Front:** Main output (faces away from you during placement).
+All blocks have a predefined output direction (Front) based on where you look during placement. Inputs come from the Back, Left, or Right sides.
 
-**2. Data & Math Gates (Kalkulator System):**
-These gates don't just send ON/OFF signals, they send **numbers**! 🔢
+#### ⚙️ 1. Logic Category (`/bramka logic <type>`)
+* **NOT** 🔴: Inverts the input signal from the back.
+* **NOR** 🔴: Outputs ON only if all inputs (Back and Sides) are OFF.
+* **AND** 🟡: Outputs ON only if both side inputs are ON.
+* **OR** 🟡: Outputs ON if at least one input (Back or Sides) is ON.
+* **BUFFER** 🟡: Isolates and passes the signal from the back forward.
+* **PULSER** 🟡: Monostable circuit. Detects the rising edge from the back and triggers a clean **1-tick pulse** output, then instantly shuts down.
+* **NAND** 🟠: Inverted AND. Outputs OFF only if both sides are ON.
+* **XNOR** 🟠: Outputs ON if both side inputs are identical (both ON or both OFF).
+* **NIMPLY** 🟠: NOT IMPLY. Outputs ON only if Back is ON and Sides are OFF.
+* **XOR** 🟢: Exclusive OR. Outputs ON if side inputs are different.
+* **IMPLY** 🟢: Outputs OFF only if Back is ON and Sides are OFF.
+* **MUX** 🟢: Multiplexer. Passes signal from Left or Right side depending on the Back input state.
+* **SYNCHRONIZER** 🟤: Synchronizes signals. Outputs ON only when inputs from specified sides arrive at the exact same tick.
 
-* **VARIABLE_GATE:** Stores a number. It sends its value to the output immediately when it receives it. Perfect for memory in a calculator.
-* **MATH_GATE:** Has modes like `ADD`, `SUB`, `MUL`, `DIV` and `POW`. Connect data to the **left** and **right** side to perform calculations.
-* **COMPARATOR:** Compares two numbers. Modes: `==`, `>`, `<`, `>=`, `<=`, `!=`. If the condition is met, it outputs a Redstone signal.
-* **NUMBER_GATE:** A fixed value block. When powered from the back, it sends its preset number forward.
-* **BOOLEAN_GATE:** The bridge between Redstone and Data. It converts a standard signal into numbers: ON = 1, OFF = 0. Fully compatible with Math and Variable gates!
-* **DECODER:** Outputs a signal only if the received number matches its target (e.g., a Decoder set to 5 will only turn on when it gets the number 5).
-* **LINKER:** A "data valve". It lets the number through from the left side, UNLESS it's powered from the right side (which acts as a block/brake).
+#### 💾 2. Memory Category (`/bramka memory <type>`)
+* **LATCH** 🔵: RS-Latch memory cell. Set input on one side, Reset on the other.
+* **TFF** 🔷: Toggle Flip-Flop. Changes its output state (Toggles ON/OFF) every time it receives a short pulse from the back.
+* **MEMORY_CELL** 🟦: Stores a single binary bit of data.
+* **MEMORY_READ** 🟦: Dedicated block to read data from surrounding memory cells.
 
-**3. Wireless Data Linking (`/alg link`):**
-Want to connect a `NUMBER_GATE` to a `MATH_GATE` 50 blocks away? Use the Linking System! 🔗
+#### 🔢 3. Numbers Category (`/bramka numbers <type>`)
+* **MATH** 🟦: Core calculator block. Takes numbers from Left and Right inputs, performs actions (`ADD`, `SUB`, `MUL`, `DIV`, `POW`), and sends the result forward.
+* **DECIMAL_ACCUMULATOR** 🟦: Accumulates digits to form larger numbers (e.g., typing 1 then 2 creates 12). Resets immediately on side pulse.
+* **COUNTER** ⬜: Increases/decreases its internal stored number based on side inputs.
+* **COMPARATOR** 🔲: Compares two numbers from Left and Right sides. Supports `==`, `>`, `<`, `>=`, `<=`, `!=`. Outputs a redstone signal if true.
+* **DECODER** 🔲: Outputs a Redstone signal if the incoming number from the back matches the preset target parameter.
+* **RANDOM_BOOLEAN** 🔵: Generates a random true/false state when triggered.
+* **RANDOM_NUMBER** 🔵: Generates a random number within a specified range.
+* **NUMBER_GATE** 🟤: Constant provider. Outputs a preconfigured number when powered from the back.
+* **BOOLEAN_GATE** 🟤: Converts Redstone to Data. Outputs `1` if powered, and `0` if unpowered.
 
-1. Go to the **Source Gate** (e.g., the block that sends the number).
-2. Type `/alg link`.
-3. Go to the **Target Gate** (the block that should receive the data).
-4. Type `/alg link` again.
-5. **Boom!** The gates are now connected. Whenever the source updates, the target gets the data instantly! ⚡
+#### 🔤 4. String Category (`/bramka string <type>`)
+* **STRING_COMPARATOR** 🔲: Compares two text strings from the sides.
+* **STRING_DECODER** 🔲: Outputs a Redstone signal if the incoming text matches the decoder's text parameter.
+* **STRING_GATE** 🟤: Constant text provider. Outputs a preset piece of text when powered.
 
-**4. Wireless Redstone (Bluetooth System):**
-* **SENDER:** Type `/bramka data SENDER <channel>`. Connect Redstone to it.
-* **RECEIVER:** Type `/bramka data RECEIVER <channel>`. It will output signal whenever the sender on the same channel is active.
+#### 📊 5. Data Category (`/bramka data <type>`)
+* **CABLE_DATA** ⚫: The universal data highway. Transfers text and numbers between data blocks without mixing them up with normal Redstone. Includes anti-echo protection!
+* **DISPLAY** ⬜: Text hologram display. Renders any incoming string/number from the back dynamically in the air.
+* **TRANSISTOR** 🔴: Data valve. Passes data from the back to the front unless it is blocked by a side Redstone signal.
+* **VARIABLE_GATE** 🔷: Data Latch. Permanently stores and outputs the last text/number received from the back. Clears instantly into an empty string when triggered by a side Reset signal.
+* **BATTERY** 🟠: Energy storage cell. Charges when powered from the back and slowly decays over time. Outputs its current status as a percentage (e.g., `85%`).
+
+#### 📡 6. Space (Wireless) Category (`/bramka space <type>`)
+* **SENDER** 🟪: Bluetooth transmitter. Reads text/numbers from the back and broadcasts them wirelessly to a specific channel.
+* **RECEIVER** 🟪: Bluetooth receiver. Tunes into a channel, captures the transmitted data string, and outputs it forward.
+* **SENSOR** 🟥: Motion radar. Scans a configured radius and outputs a Redstone signal if a player is detected nearby.
+
+#### ⏱️ 7. Time Category (`/bramka time <type>`)
+* **CLOCK** 🟩: Automatic clock generator. Constantly toggles its output based on a configured interval.
+* **CLOCK_GATE** 🟢: Gated clock. Toggles its output only when the back input is actively powered.
+* **REPEATER** 🟡: Advanced repeater. Allows custom delays up to several seconds without losing signal strength.
 
 ---
 
