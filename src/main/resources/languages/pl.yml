@@ -5,11 +5,11 @@
 # #                                                           #
 # #############################################################
 
-# You can use color codes (e.g., &a, &c, &l) and placeholders like %time%, %player%, %min%.
+# Możesz używać kodów kolorów (np. &a, &c, &l) HEX'ÓW oraz gradientów i placeholderów jak %time%, %player%, %min%.
 messages:
   no-permission: "&cNie masz permisji!"
   reload-success: "&aKonfiguracja przeładowana pomyślnie!"
-  usage-gate-command: "&cUżycie: §6/bramka <Kategoria> <Typ> <Parametr"
+  usage-gate-command: "&cUżycie: &6/bramka <Kategoria> <Typ> <Parametr>"
 
   # Wiadomości z komendy /bramka
   need-channel: "&cMusisz podać kanał! <kanał1,kanał2...>"
@@ -20,7 +20,7 @@ messages:
   wrong-format: "&cZły format! Użyj: min-max (np. 0-10)"
   provide-mode: "&cPodaj tryb!"
   provide-sign: "&cPodaj znak! (>, <, ==, !=, >=, <=)"
-  provide-string-mode: "&cPodaj znak! (==, EQUALS, EQUALS_IGNORE_CASE,=I, CONTAINS, STARTS_WITH, ENDS_WITH, EMPTY)"
+  provide-string-mode: "&cPodaj znak! (EQUALS, EQUALS_IGNORE_CASE, CONTAINS, STARTS_WITH, ENDS_WITH, EMPTY)"
   invalid-sign: "&cTo nie jest prawidłowy operator matematyczny!"
   invalid-string-sign: "&cTo nie jest prawidłowy operator tekstowy!"
   negative-number: "&cNie możesz wpisać liczby ujemnej!"
@@ -38,6 +38,7 @@ messages:
   seconds-range: "&cCzas w sekundach musi być od 1s do 10s!"
 
   # Wiadomości z interacją bramek
+  gate-item-name-prefix: "&4Bramka: &c"
   gate-removed: "&cBramka &6{TYPE} &czostała usunięta!"
   power-block-break-deny: "&cTo jest blok zasilający wyjście bramki!"
   gate-placed: "&aPostawiono bramkę &e{TYPE} &6Wyjście: &e{OUT}"
@@ -67,11 +68,12 @@ messages:
   range-set: "&7Ustawiono zasięg czujnika: &f{VAL}"
 
   # Zaznaczanie
+  selector-item-name: "&dSelektor Bramek"
   receive-selector: "&aOtrzymałeś Selektor Bramek!"
   position-1-selected: "&ePunkt 1 ustawiony!"
   position-2-selected: "&ePunkt 2 ustawiony!"
   both-positions-required: "&cMusisz najpierw zaznaczyć oba punkty!"
-  cut-out-area: "&aWycięto obszar, Usunięto §f{COUNT} &abramek logicznych"
+  cut-out-area: "&aWycięto obszar, usunięto &f{COUNT} &abramek logicznych"
 
   # Kopiowanie wklejanie obracanie i cofnięcia
   copy-success: "&aSkopiowano &e{COUNT} &abramek do schowka!"

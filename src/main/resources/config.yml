@@ -22,5 +22,12 @@ settings:
 gates:
   data-gates:
     battery:
-      decay-time-minutes: 5 # Every how many minutes should it discharge one percent?
-      charge-time-seconds: 5 # Every how many seconds should it charge at one percent?
+      decay-time-minutes: 3 # Every how many minutes should it discharge one percent?
+      charge-time-seconds: 30 # Every how many seconds should it charge at one percent?
+    display:
+      # Format pattern for the hologram text.
+      # Use '{text}' as a placeholder for the actual data value.
+      # You can use standard legacy colors (&a, &b), MiniMessage tags (<red>, <#HEX>),
+      # or even complex gradients (e.g., <gradient:white:red>{text}</gradient>).
+      # Example: "<gradient:#F2F2F2:#FF2E2E>{text}</gradient>"
+      color: "&f{text}"

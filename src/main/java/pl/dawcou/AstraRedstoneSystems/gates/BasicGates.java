@@ -43,16 +43,13 @@ public class BasicGates {
             boolean currentState = config.getBoolean(path + ".state", false);
             Block target = gate.getRelative(out);
 
-            // POBIERANIE SYGNAŁÓW (pS1 i pS2 to Twoje s1 i s2 w particle)
+            // POBIERANIE SYGNAŁÓW
             boolean pBack = GateUtils.getPowerAt(gate.getRelative(back)) > 0;
             boolean pS1 = GateUtils.getPowerAt(gate.getRelative(s1)) > 0;
             boolean pS2 = GateUtils.getPowerAt(gate.getRelative(s2)) > 0;
 
-            // --- PARTICLE STATUSU ---
-            if (type.matches("OR|NOR|AND|NAND|XOR|XNOR|NOT|BUFFER|IMPLY|NIMPLY|MUX|PULSER")) {
-                GateUtils.spawnStatusParticle(gate, out, currentState);
-            }
-
+            // --- PARTICLE STATUSU (WEJŚCIA) ---
+            // Usunęliśmy stąd rysowanie przodu (out), zostały tylko wejścia!
             if (type.matches("OR|NOR|AND|NAND|XOR|XNOR|NIMPLY|IMPLY|MUX")) {
                 GateUtils.spawnStatusParticle(gate, s1, pS1);
                 GateUtils.spawnStatusParticle(gate, s2, pS2);
@@ -64,7 +61,7 @@ public class BasicGates {
             // LOGIKA
             boolean newState = false;
 
-            newState = switch (type) { // Dodaj "newState =" tutaj!
+            newState = switch (type) {
                 case "NOT" -> !pBack;
                 case "OR" -> (pS1 || pS2 || pBack);
                 case "NOR" -> !(pS1 || pS2 || pBack);
@@ -77,21 +74,14 @@ public class BasicGates {
                 case "BUFFER" -> pBack;
                 case "MUX" -> pBack ? pS1 : pS2;
                 case "PULSER" -> {
-                    // Czytamy czysty prąd redstone / binarny z tyłu bramki
                     boolean in = GateUtils.getPowerAt(gate.getRelative(back)) > 0;
                     boolean lastIn = config.getBoolean(path + ".last_input_state", false);
-
                     boolean result = false;
 
-                    // Wykrywamy tylko moment włączenia dźwigni (zbocze narastające)
                     if (in && !lastIn) {
-                        result = true; // Impuls włączony tylko na ten 1 tick!
+                        result = true;
                     }
-
-                    // Zapamiętujemy stan wejścia na kolejny tick
                     config.set(path + ".last_input_state", in);
-
-                    // Zwracamy wynik do zmiennej newState
                     yield result;
                 }
                 case "SYNCHRONIZER" -> {
@@ -101,7 +91,7 @@ public class BasicGates {
                     GateUtils.spawnStatusParticle(gate.getRelative(s1), back, pA);
                     GateUtils.spawnStatusParticle(gate.getRelative(s2), back, pB);
 
-                    yield (pA && pB); // Teraz yield zadziała idealnie
+                    yield (pA && pB);
                 }
                 default -> currentState;
             };
@@ -110,11 +100,10 @@ public class BasicGates {
             if (type.equals("SYNCHRONIZER")) {
                 GateUtils.spawnStatusParticle(gate.getRelative(s1), out, newState);
                 GateUtils.spawnStatusParticle(gate.getRelative(s2), out, newState);
-                // 1. Pobieramy zapisane lokacje boków z configu środka
+
                 String sideLLoc = config.getString(path + ".sideL");
                 String sideRLoc = config.getString(path + ".sideR");
 
-                // 2. Aktualizujemy wyjścia używając TYCH SAMYCH kluczy co w onPlace/onBreak
                 if (sideLLoc != null) {
                     GateUtils.updateOutput(plugin, "gates." + sideLLoc, gate.getRelative(s1).getRelative(out), newState);
                 }
@@ -122,8 +111,16 @@ public class BasicGates {
                     GateUtils.updateOutput(plugin, "gates." + sideRLoc, gate.getRelative(s2).getRelative(out), newState);
                 }
             } else {
-                // Standard dla reszty
+                // 1. Najpierw aktualizujemy blok fizyczny w świecie
                 GateUtils.updateOutput(plugin, path, target, newState);
+
+                // 2. Zapisujemy świeży, obliczony stan do configu
+                config.set(path + ".state", newState);
+
+                // 3. JEDYNE I SŁUSZNE MIEJSCE NA DYMEK Z PRZODU NA BAZIE AKTUALNEGO newState! 🟢
+                if (type.matches("OR|NOR|AND|NAND|XOR|XNOR|NOT|BUFFER|IMPLY|NIMPLY|MUX|PULSER")) {
+                    GateUtils.spawnStatusParticle(gate, out, newState);
+                }
             }
         }
     }

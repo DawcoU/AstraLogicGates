@@ -9,7 +9,7 @@ import java.util.function.Consumer;
 public class UpdateChecker {
 
     private final AstraRS plugin;
-    private final String projectSlug = "astraredstonesystems";
+    private final String projectId = "6PT3nWjN";
 
     public UpdateChecker(AstraRS plugin) {
         this.plugin = plugin;
@@ -19,10 +19,11 @@ public class UpdateChecker {
         // Od razu odpalamy to asynchronicznie, żeby nie blokować serwera
         plugin.getServer().getAsyncScheduler().runNow(plugin, task -> {
             try {
-                URL url = new URL("https://api.modrinth.com/v2/project/" + projectSlug + "/version");
+                // Zapytanie bezpośrednio po ID projektu
+                URL url = new URL("https://api.modrinth.com/v2/project/" + projectId + "/version");
                 HttpURLConnection connection = (HttpURLConnection) url.openConnection();
                 connection.setRequestMethod("GET");
-                connection.setRequestProperty("User-Agent", "AstraLogin-UpdateChecker");
+                connection.setRequestProperty("User-Agent", "AstraRedstoneSystems-UpdateChecker");
 
                 try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()))) {
                     StringBuilder response = new StringBuilder();

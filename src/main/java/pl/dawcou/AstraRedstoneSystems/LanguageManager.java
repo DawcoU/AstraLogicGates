@@ -16,7 +16,7 @@ public class LanguageManager {
 
     private final JavaPlugin plugin;
     private final Map<String, String> messages = new HashMap<>();
-    private final MiniMessage miniMessage = MiniMessage.miniMessage();
+    private final MiniMessage miniMessage = MiniMessage.builder().strict(false).build();
 
     public LanguageManager(JavaPlugin plugin) {
         this.plugin = plugin;
@@ -25,7 +25,7 @@ public class LanguageManager {
     }
 
     public void reload() {
-        // 1. Czyścimy mapę, żeby nie dublować przy przeładowaniu
+        // Czyścimy mapę, żeby nie dublować przy przeładowaniu
         messages.clear();
 
         String lang = plugin.getConfig().getString("settings.language", "pl");
@@ -37,14 +37,13 @@ public class LanguageManager {
 
         FileConfiguration langConfig = YamlConfiguration.loadConfiguration(langFile);
 
-        // 2. Pobieramy sekcję "messages" z pliku YAML
+        // Pobieramy sekcję "messages" z pliku YAML
         ConfigurationSection msgSection = langConfig.getConfigurationSection("messages");
 
         if (msgSection != null) {
             for (String key : msgSection.getKeys(false)) {
                 String msg = msgSection.getString(key);
                 if (msg != null) {
-                    // Konwertujemy stary format '&' na format Adventure (MiniMessage kompatybilny ze starymi kolorami)
                     messages.put(key, parseToLegacy(msg));
                 }
             }
@@ -72,44 +71,52 @@ public class LanguageManager {
     }
 
     /**
-     * Pomocnicza metoda zamieniająca tagi MiniMessage (i opcjonalnie stare kody '&')
-     * na tradycyjny format kolorów (§), który zwracamy jako String do wiadomości i configów.
+     * Główny parser: Zamienia tagi MiniMessage (gradienty, hexy) oraz stare kody '&'
+     * na tradycyjny format kolorów (§), zwracany jako zwykły String.
      */
-    private String parseToLegacy(String text) {
+    public String parseToLegacy(String text) {
         if (text == null) return "";
 
-        // Upewniamy się, że ampersandy są ujednolicone do paragrafów §
-        String formatted = text.replace("&", "§");
+        // 1. Jeśli linijka ma tagi MiniMessage (gradienty, hexy itp.)
+        if (text.contains("<") && text.contains(">")) {
+            try {
+                // Podmieniamy ewentualne '&' na '§', żeby ujednolicić format przed parsowaniem
+                String prepared = text.replace("&", "§");
 
-        // Jeśli tekst zawiera tagi MiniMessage, musimy go bezpiecznie przeparsować
-        if (formatted.contains("<") && formatted.contains(">")) {
-            // HACK: Przekształcamy stare kolory (§) na format akceptowalny przez MiniMessage
-            // Dzięki temu MiniMessage nie wyrzuci błędu o wykryciu starego formatowania!
-            String hexCompat = MiniMessage.miniMessage().serialize(
-                    LegacyComponentSerializer.legacySection().deserialize(formatted)
-            );
+                // MiniMessage bezpiecznie przetwarza tu gradienty i kolory HEX na Komponent
+                Component parsed = miniMessage.deserialize(prepared);
 
-            // Teraz bezpiecznie parsujemy całość i zwracamy jako stary format systemowy
-            Component parsed = MiniMessage.miniMessage().deserialize(hexCompat);
-            return LegacyComponentSerializer.legacySection().serialize(parsed);
+                // Serializujemy komponent z powrotem do Stringa z gęsto rozsianymi znakami '§'
+                // Dzięki temu silnik Minecrafta przeczyta gradient ze zwykłego Stringa!
+                return LegacyComponentSerializer.legacySection().serialize(parsed);
+            } catch (Exception e) {
+                // Awaryjny ratunek w razie złej składni w pliku konfiguracyjnym
+                return text.replace("&", "§");
+            }
         }
 
-        return formatted;
+        // 2. Jeśli linijka NIE MA tagów MiniMessage, traktujemy ją w 100% klasycznie
+        return text.replace("&", "§");
     }
 
-    // Pobiera czystą wiadomość z mapy
+    // Pobiera czystą wiadomość z mapy i od razu ją konwertuje (Z PREFIXEM LUB BEZ - zależy co masz w configu)
     public String getMessage(String path) {
-        return messages.getOrDefault(path, "§cMissing string: " + path);
+        String rawMessage = messages.getOrDefault(path, "§cMissing string: " + path);
+        return parseToLegacy(rawMessage);
     }
 
+    // Pobiera wiadomość z prefixem SZTYWNO na początku (zostawiamy, jeśli gdzieś używasz)
     public String getWithPrefix(String path) {
-        // Konwertujemy prefix za pomocą parseToLegacy na wypadek, gdyby AstraLogin.PREFIX zawierał tagi HEX
         return parseToLegacy(AstraRS.PREFIX) + " " + getMessage(path);
     }
 
-    // Metoda z placeholderem (np. do {COUNT})
+    // Metoda z placeholderem (teraz bezpiecznie przetwarza podmieniony tekst)
     public String getWithPrefix(String path, String placeholder, String value) {
-        String msg = getMessage(path).replace(placeholder, value);
-        return parseToLegacy(AstraRS.PREFIX) + " " + msg;
+        // 1. Pobieramy SUROWY tekst z mapy, żeby placeholder się podmienił zanim wejdą sekcje '§'
+        String rawMessage = messages.getOrDefault(path, "§cMissing string: " + path);
+        String msg = rawMessage.replace(placeholder, value);
+
+        // 2. Dopiero teraz formatujemy całość
+        return parseToLegacy(AstraRS.PREFIX) + " " + parseToLegacy(msg);
     }
 }

@@ -1,5 +1,6 @@
 package pl.dawcou.AstraRedstoneSystems.gates;
 
+import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
@@ -27,7 +28,6 @@ public class NumberGates {
         if (gatesSection == null) return;
 
         boolean debug = plugin.getConfig().getBoolean("settings.debug-mode", false);
-        String prefix = "§8[§bAstraRedstoneSystems§8] §7[§dDebug§7] ";
 
         for (String key : gatesSection.getKeys(false)) {
             String path = "gates." + key;
@@ -64,7 +64,7 @@ public class NumberGates {
 
                 // Dodajemy DECIMAL_ACCUMULATOR tutaj
                 if (type.equals("COUNTER") || type.equals("DECIMAL_ACCUMULATOR")) {
-                    int vBack = GateUtils.getNumberFrom(gate.getRelative(back), back.getOppositeFace(), plugin);
+                    long vBack = GateUtils.getNumberFrom(gate.getRelative(back), back.getOppositeFace(), plugin);
                     // Świeci jeśli idzie liczba LUB prąd
                     GateUtils.spawnStatusParticle(gate, back, vBack > 0 || pBack);
                 } else {
@@ -79,13 +79,13 @@ public class NumberGates {
 
                 if (type.equals("COUNTER") || type.equals("MATH") || type.equals("DECIMAL_ACCUMULATOR") || type.equals("COMPARATOR")) {
                     // LEWO
-                    int vL = GateUtils.getNumberFrom(gate.getRelative(faceL), faceL.getOppositeFace(), plugin);
-                    if (vL == 0 || vL == Integer.MIN_VALUE) vL = GateUtils.getPowerAt(gate.getRelative(faceL));
+                    long vL = GateUtils.getNumberFrom(gate.getRelative(faceL), faceL.getOppositeFace(), plugin);
+                    if (vL == 0 || vL == Long.MIN_VALUE) vL = GateUtils.getPowerAt(gate.getRelative(faceL));
                     GateUtils.spawnStatusParticle(gate, faceL, vL > 0);
 
                     // PRAWO
-                    int vR = GateUtils.getNumberFrom(gate.getRelative(faceR), faceR.getOppositeFace(), plugin);
-                    if (vR == 0 || vR == Integer.MIN_VALUE) vR = GateUtils.getPowerAt(gate.getRelative(faceR));
+                    long vR = GateUtils.getNumberFrom(gate.getRelative(faceR), faceR.getOppositeFace(), plugin);
+                    if (vR == 0 || vR == Long.MIN_VALUE) vR = GateUtils.getPowerAt(gate.getRelative(faceR));
                     GateUtils.spawnStatusParticle(gate, faceR, vR > 0);
 
                 } else {
@@ -99,25 +99,25 @@ public class NumberGates {
             switch (type) {
                 case "NUMBER_GATE" -> {
                     boolean pBack = GateUtils.getPowerAt(gate.getRelative(back)) > 0;
-                    int storedValue = config.getInt(path + ".value", 0);
+                    long storedValue = config.getLong(path + ".value", 0);
 
-                    // LOGIKA: Jeśli OFF -> Integer.MIN_VALUE, Jeśli ON -> storedValue
-                    int valToSend = pBack ? storedValue : Integer.MIN_VALUE;
+                    // LOGIKA: Jeśli OFF -> Long.MIN_VALUE, Jeśli ON -> storedValue
+                    long valToSend = pBack ? storedValue : Long.MIN_VALUE;
                     String currentResStr = String.valueOf(valToSend);
 
-                    String lastOutStr = config.getString(path + ".current_out", String.valueOf(Integer.MIN_VALUE));
+                    String lastOutStr = config.getString(path + ".current_out", String.valueOf(Long.MIN_VALUE));
 
                     if (!currentResStr.equals(lastOutStr)) {
                         config.set(path + ".current_out", currentResStr);
                         config.set(path + ".state", pBack);
-                        // GateUtils musi umieć odebrać inta i przekazać go dalej
+                        // GateUtils musi umieć odebrać longa i przekazać go dalej
                         GateUtils.updateOutput(plugin, path, target, pBack);
                     }
                 }
 
                 case "BOOLEAN_GATE" -> {
                     boolean hasPower = GateUtils.getPowerAt(gate.getRelative(back)) > 0;
-                    int valueToSend = hasPower ? 1 : 0;
+                    long valueToSend = hasPower ? 1L : 0L;
 
                     // 1. Przygotowujemy uniwersalny String systemowy
                     String currentResStr = String.valueOf(valueToSend);
@@ -129,8 +129,8 @@ public class NumberGates {
                     if (!currentResStr.equals(lastOutStr)) {
 
                         if (debug) {
-                            org.bukkit.Bukkit.getConsoleSender().sendMessage(
-                                    prefix + "§3BOOLEAN_GATE §7na §e" + key + " §7-> Stan: " + (hasPower ? "§aWŁĄCZONY (1)" : "§cWYŁĄCZONY (0)")
+                            Bukkit.getConsoleSender().sendMessage(
+                                    AstraRS.DEBUG_PREFIX + "§3BOOLEAN_GATE §7na §e" + key + " §7-> Stan: " + (hasPower ? "§aWŁĄCZONY (1)" : "§cWYŁĄCZONY (0)")
                             );
                         }
 
@@ -147,26 +147,26 @@ public class NumberGates {
                     BlockFace left = right.getOppositeFace();
 
                     // --- POBIERANIE DANYCH ---
-                    int dataBack = GateUtils.getNumberFrom(gate.getRelative(back), back.getOppositeFace(), plugin);
-                    int dataLeft = GateUtils.getNumberFrom(gate.getRelative(left), left.getOppositeFace(), plugin);
+                    long dataBack = GateUtils.getNumberFrom(gate.getRelative(back), back.getOppositeFace(), plugin);
+                    long dataLeft = GateUtils.getNumberFrom(gate.getRelative(left), left.getOppositeFace(), plugin);
 
                     // NORMALIZACJA:
-                    if (dataBack == Integer.MIN_VALUE) dataBack = 0;
-                    if (dataLeft == Integer.MIN_VALUE) dataLeft = 0;
+                    if (dataBack == Long.MIN_VALUE) dataBack = 0;
+                    if (dataLeft == Long.MIN_VALUE) dataLeft = 0;
 
                     boolean pB = GateUtils.getPowerAt(gate.getRelative(back)) > 0;
                     boolean pL = GateUtils.getPowerAt(gate.getRelative(left)) > 0;
                     boolean pR = GateUtils.getPowerAt(gate.getRelative(right)) > 0;
 
                     // --- POBIERANIE POPRZEDNICH STANÓW (Z CONFIGU) ---
-                    int lastDataBack = config.getInt(path + ".last_data_back", 0);
-                    int lastDataLeft = config.getInt(path + ".last_data_left", 0);
+                    long lastDataBack = config.getLong(path + ".last_data_back", 0);
+                    long lastDataLeft = config.getLong(path + ".last_data_left", 0);
                     boolean lB = config.getBoolean(path + ".last_back", false);
                     boolean lL = config.getBoolean(path + ".last_left", false);
                     boolean lR = config.getBoolean(path + ".last_right", false);
 
-                    int count = config.getInt(path + ".count", 0);
-                    int limit = config.getInt(path + ".score_limit", 15);
+                    long count = config.getLong(path + ".count", 0);
+                    long limit = config.getLong(path + ".score_limit", 15);
                     boolean changed = false;
 
                     // --- LOGIKA: DODAWANIE (TYŁ) ---
@@ -208,8 +208,8 @@ public class NumberGates {
                         }
 
                         if (debug) {
-                            org.bukkit.Bukkit.getConsoleSender().sendMessage(
-                                    prefix + "§5COUNTER §7na §e" + key + " §7-> Nowy stan licznika: §d§l" + count + "§7/§5" + limit
+                            Bukkit.getConsoleSender().sendMessage(
+                                    AstraRS.DEBUG_PREFIX + "§5COUNTER §7na §e" + key + " §7-> Nowy stan licznika: §d§l" + count + "§7/§5" + limit
                             );
                         }
                     }
@@ -227,42 +227,39 @@ public class NumberGates {
                     BlockFace right = GateUtils.rotate90(out);
                     BlockFace left = right.getOppositeFace();
 
-                    int vL_raw = GateUtils.getNumberFrom(gate.getRelative(left), left.getOppositeFace(), plugin);
-                    int vR_raw = GateUtils.getNumberFrom(gate.getRelative(right), right.getOppositeFace(), plugin);
+                    // 1. POBIERANIE DANYCH
+                    long vL_raw = GateUtils.getNumberFrom(gate.getRelative(left), left.getOppositeFace(), plugin);
+                    long vR_raw = GateUtils.getNumberFrom(gate.getRelative(right), right.getOppositeFace(), plugin);
 
-                    int vL = (vL_raw == Integer.MIN_VALUE) ? 0 : vL_raw;
-                    int vR = (vR_raw == Integer.MIN_VALUE) ? 0 : vR_raw;
+                    // 2. NORMALIZACJA - Sprawdzamy Long.MIN_VALUE
+                    long vL = (vL_raw == Long.MIN_VALUE) ? 0L : vL_raw;
+                    long vR = (vR_raw == Long.MIN_VALUE) ? 0L : vR_raw;
 
                     String m = config.getString(path + ".mode", "ADD").toUpperCase();
 
-                    // Używamy LONG do bezpiecznych obliczeń
-                    long calc = switch (m) {
-                        case "SUB", "-" -> (long) vL - vR;
-                        case "MUL", "*" -> (long) vL * vR;
-                        case "DIV", "/" -> (vR != 0) ? (long) vL / vR : 0;
+                    // 3. OBLICZENIA - Czyste operacje na longach, bez żadnego rzutowania (long)
+                    long result = switch (m) {
+                        case "SUB", "-" -> vL - vR;
+                        case "MUL", "*" -> vL * vR;
+                        case "DIV", "/" -> (vR != 0) ? vL / vR : 0L;
+                        // Przy potęgowaniu Math.pow zwraca double, więc musimy rzutować na (long)
                         case "POW", "^" -> (long) Math.pow(vL, vR);
-                        default -> (long) vL + vR;
+                        default -> vL + vR;
                     };
 
-                    // CLAMPING: Jeśli wynik jest poza zakresem INT, ustawiamy na granice
-                    int result;
-                    if (calc > Integer.MAX_VALUE) result = Integer.MAX_VALUE;
-                    else if (calc < Integer.MIN_VALUE) result = Integer.MIN_VALUE; // Lub np. 0, jeśli wolisz
-                    else result = (int) calc;
-
-                    // Odczytujemy jako String. Domyślnie "" (pusty string to "brak wyniku")
+                    // 4. ZAPIS I AKTUALIZACJA
                     String lastRes = config.getString(path + ".current_out", "");
-                    String currentResStr = String.valueOf(result);
+                    String currentResStr = String.valueOf(result); // Teraz automatycznie sparsuje wielkiego longa
 
                     if (!currentResStr.equals(lastRes)) {
                         if (debug) {
-                            org.bukkit.Bukkit.getConsoleSender().sendMessage(
-                                    prefix + "§d§lMATH §e" + key + " §7wynik: §a§l" + result
+                            Bukkit.getConsoleSender().sendMessage(
+                                    AstraRS.DEBUG_PREFIX + "§d§lMATH §e" + key + " §7wynik: §a§l" + result
                             );
                         }
                         config.set(path + ".current_out", currentResStr);
-                        // Aktywna, jeśli wynik to cokolwiek poza 0 (zależnie od Twoich preferencji)
-                        boolean isActive = (result != 0);
+
+                        boolean isActive = (result != 0L);
                         config.set(path + ".state", isActive);
                         GateUtils.updateOutput(plugin, path, target, isActive);
                     }
@@ -276,12 +273,12 @@ public class NumberGates {
                     boolean resetR = GateUtils.getPowerAt(gate.getRelative(right)) > 0;
 
                     // Pobieramy wartość
-                    int inputVal = GateUtils.getNumberFrom(gate.getRelative(back), back.getOppositeFace(), plugin);
+                    long inputVal = GateUtils.getNumberFrom(gate.getRelative(back), back.getOppositeFace(), plugin);
 
                     // 1. Reset
                     if (resetL || resetR) {
                         config.set(path + ".current_out", "0");
-                        config.set(path + ".last_input", Integer.MIN_VALUE);
+                        config.set(path + ".last_input", Long.MIN_VALUE);
                         config.set(path + ".state", true);
                         GateUtils.updateOutput(plugin, path, target, true);
                     }
@@ -289,20 +286,20 @@ public class NumberGates {
                     // 2. Logika APPEND
                     else {
                         // Pobieramy ostatni stan (domyślnie brak sygnału)
-                        int lastInput = config.getInt(path + ".last_input", Integer.MIN_VALUE);
+                        long lastInput = config.getLong(path + ".last_input", Long.MIN_VALUE);
 
                         if (inputVal >= 0 && inputVal <= 9) {
-                            if (lastInput == Integer.MIN_VALUE) {
+                            if (lastInput == Long.MIN_VALUE) {
 
                                 String lastRes = config.getString(path + ".current_out", "0");
-                                int currentVal = 0;
+                                long currentVal = 0;
                                 try {
-                                    currentVal = Integer.parseInt(lastRes);
+                                    currentVal = Long.parseLong(lastRes);
                                 } catch (Exception e) {
                                     currentVal = 0;
                                 }
 
-                                int result = (currentVal * 10) + inputVal;
+                                long result = (currentVal * 10L) + inputVal;
 
                                 config.set(path + ".current_out", String.valueOf(result));
                                 config.set(path + ".state", true);
@@ -313,8 +310,8 @@ public class NumberGates {
                             }
                         }
                         // Jeśli sygnał zniknął, resetujemy "last_input", żeby pozwolić na kolejny impuls
-                        else if (inputVal == Integer.MIN_VALUE) {
-                            config.set(path + ".last_input", Integer.MIN_VALUE);
+                        else if (inputVal == Long.MIN_VALUE) {
+                            config.set(path + ".last_input", Long.MIN_VALUE);
                         }
                     }
                 }
@@ -323,21 +320,21 @@ public class NumberGates {
                     BlockFace right = GateUtils.rotate90(out);
                     BlockFace left = right.getOppositeFace();
 
-                    int vL = GateUtils.getNumberFrom(gate.getRelative(left), left.getOppositeFace(), plugin);
-                    int vR = GateUtils.getNumberFrom(gate.getRelative(right), right.getOppositeFace(), plugin);
+                    long vL = GateUtils.getNumberFrom(gate.getRelative(left), left.getOppositeFace(), plugin);
+                    long vR = GateUtils.getNumberFrom(gate.getRelative(right), right.getOppositeFace(), plugin);
 
                     // Jeśli lewe wejście (dane) to MIN_VALUE, od razu gasimy wyjście
-                    if (vL == Integer.MIN_VALUE) {
+                    if (vL == Long.MIN_VALUE) {
                         if (!"MIN_VALUE".equals(config.getString(path + ".current_out", ""))) {
                             config.set(path + ".current_out", "MIN_VALUE");
                             config.set(path + ".state", false);
                             // Przekazujemy false, bo brak danych = brak sygnału
                             GateUtils.updateOutput(plugin, path, target, false);
                         }
-                        return;
+                        break;
                     }
 
-                    int valR = (vR == Integer.MIN_VALUE) ? 0 : vR;
+                    long valR = (vR == Long.MIN_VALUE) ? 0 : vR;
                     String m = config.getString(path + ".mode", "==");
 
                     boolean result = switch (m) {
@@ -350,15 +347,15 @@ public class NumberGates {
                         default   -> false;
                     };
 
-                    int finalVal = result ? vL : Integer.MIN_VALUE;
+                    long finalVal = result ? vL : Long.MIN_VALUE;
                     String currentResStr = String.valueOf(finalVal);
                     String lastOutStr = config.getString(path + ".current_out", "");
 
                     if (!currentResStr.equals(lastOutStr)) {
                         if (debug) {
                             String compColor = result ? "§a" : "§c";
-                            org.bukkit.Bukkit.getConsoleSender().sendMessage(
-                                    prefix + "§2COMPARATOR §7na §e" + key + " §7wynik (§6" + m + "§7): " + compColor + (result ? "TRUE" : "FALSE")
+                            Bukkit.getConsoleSender().sendMessage(
+                                    AstraRS.DEBUG_PREFIX + "§2COMPARATOR §7na §e" + key + " §7wynik (§6" + m + "§7): " + compColor + (result ? "TRUE" : "FALSE")
                             );
                         }
                         config.set(path + ".current_out", currentResStr);
@@ -370,20 +367,19 @@ public class NumberGates {
                 }
 
                 case "DECODER" -> {
-                    int incoming = GateUtils.getNumberFrom(gate.getRelative(back), back.getOppositeFace(), plugin);
-                    int targetValue = config.getInt(path + ".value", 0);
+                    long incoming = GateUtils.getNumberFrom(gate.getRelative(back), back.getOppositeFace(), plugin);
+                    long targetValue = config.getLong(path + ".value", 0);
                     boolean isMatch = (incoming == targetValue && incoming != 0);
-                    int finalVal = isMatch ? 1 : 0;
+                    long finalVal = isMatch ? 1L : 0L;
 
-                    // 🔥 ZMIANA: Pełna konwersja na String przy zapisie i odczycie
                     String currentResStr = String.valueOf(finalVal);
                     String lastOutStr = config.getString(path + ".current_out", "");
 
                     if (!currentResStr.equals(lastOutStr)) {
                         if (debug) {
                             String matchColor = isMatch ? "§aTRAFIONY" : "§cBRAK DOPASOWANIA";
-                            org.bukkit.Bukkit.getConsoleSender().sendMessage(
-                                    prefix + "§eDECODER §7na §e" + key + " §7(Szukał: §6" + targetValue + "§7) -> Status: " + matchColor + " §7(Dostał: §b" + incoming + "§7)"
+                            Bukkit.getConsoleSender().sendMessage(
+                                    AstraRS.DEBUG_PREFIX + "§eDECODER §7na §e" + key + " §7(Szukał: §6" + targetValue + "§7) -> Status: " + matchColor + " §7(Dostał: §b" + incoming + "§7)"
                             );
                         }
                         config.set(path + ".current_out", currentResStr);
@@ -397,17 +393,17 @@ public class NumberGates {
                     boolean lastIn = config.getBoolean(path + ".lastInput", false);
 
                     if (in && !lastIn) {
-                        int result = type.equals("RANDOM_BOOLEAN")
-                                ? (ThreadLocalRandom.current().nextBoolean() ? 1 : 0)
-                                : ThreadLocalRandom.current().nextInt(config.getInt(path + ".min", 0), config.getInt(path + ".max", 15) + 1);
+                        long result = type.equals("RANDOM_BOOLEAN")
+                                ? (ThreadLocalRandom.current().nextBoolean() ? 1L : 0L)
+                                : ThreadLocalRandom.current().nextLong(config.getLong(path + ".min", 0), config.getLong(path + ".max", 15) + 1);
 
                         // SYSTEMOWA POPRAWKA ZAPISU ORAZ STANU (Obsługuje liczby ujemne!)
                         String currentResStr = String.valueOf(result);
                         boolean isActive = (result != 0);
 
                         if (debug) {
-                            org.bukkit.Bukkit.getConsoleSender().sendMessage(
-                                    prefix + "§a§lRANDOM §7[" + type + "] na §e" + key + " §7wylosował wartość: §b§l" + result
+                            Bukkit.getConsoleSender().sendMessage(
+                                    AstraRS.DEBUG_PREFIX + "§a§lRANDOM §7[" + type + "] na §e" + key + " §7wylosował wartość: §b§l" + result
                             );
                         }
 

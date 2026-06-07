@@ -1,9 +1,7 @@
 package pl.dawcou.AstraRedstoneSystems;
 
-import net.md_5.bungee.api.ChatColor;
 import org.bstats.bukkit.Metrics;
 import org.bukkit.Bukkit;
-import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -24,16 +22,12 @@ import java.util.*;
 
 public class AstraRS extends JavaPlugin implements CommandExecutor, TabCompleter {
 
-    public static final String PREFIX = ChatColor.of("#3277e6") + "["
-            + ChatColor.of("#F2F2F2") + "Astra"
-            + ChatColor.of("#FF2E2E") + "RS"
-            + ChatColor.of("#3277e6") + "]";
-
-    public static final String PREFIX2 = "§9[§fAstra§cRS§9]";
+    public static final String PREFIX = "<#3277e6>[</#3277e6><gradient:#F2F2F2:#F2F2F2:#FF2E2E:#FF2E2E>AstraRS</gradient><#3277e6>]</#3277e6>";
+    public static final String PREFIX2 = "§9[§fAstra§4RS§9]";
+    public static final String DEBUG_PREFIX = PREFIX2 + " §b[§eDebug§b] ";
 
     private File gatesFile;
     private FileConfiguration gatesConfig;
-    private final Map<UUID, Location> linkingSession = new HashMap<>();
 
     private GateValidator gateValidator;
     private BasicGates basicGates;
@@ -63,10 +57,6 @@ public class AstraRS extends JavaPlugin implements CommandExecutor, TabCompleter
 
     public FileConfiguration getGatesConfig() {
         return gatesConfig;
-    }
-
-    public Map<UUID, Location> getLinkingSession() {
-        return this.linkingSession;
     }
 
     @Override
@@ -207,6 +197,14 @@ public class AstraRS extends JavaPlugin implements CommandExecutor, TabCompleter
 
             String category = args[0].toLowerCase();
             String type = args[1].toUpperCase();
+
+            // --- DYNAMICZNE SPRAWDZENIE PERMISJI ---
+            String permission = "astrars.gates." + category;
+            if (!player.hasPermission(permission)) {
+                player.sendMessage(this.getLanguageManager().getWithPrefix("no-permission"));
+                return true;
+            }
+
             Material mat = switch (category) {
                 case "logic" -> switch (type) {
                     case "NOT", "NOR" -> Material.RED_CONCRETE;
@@ -267,8 +265,27 @@ public class AstraRS extends JavaPlugin implements CommandExecutor, TabCompleter
             ItemMeta meta = item.getItemMeta();
             if (meta == null) return true;
 
-            meta.setDisplayName("§eBramka: §6" + type);
+            // Pobieramy prefiks nazwy bramki z pliku językowego
+            String langPrefix = this.getLanguageManager().getMessage("gate-item-name-prefix");
+            if (langPrefix == null || langPrefix.isEmpty()) {
+                langPrefix = "&4Bramka: &c"; // Bezpieczny backup
+            }
+
+            // Budujemy pełną nazwę wyświetlaną (zmuszamy totoUpperCase, tak jak w dropie)
+            net.kyori.adventure.text.Component nameComponent = net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer.legacyAmpersand()
+                    .deserialize(langPrefix + type.toUpperCase());
+
+            // BLOKADA POCHYLENIA TEKSTU – idealne dopasowanie do dropu
+            nameComponent = nameComponent.decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false);
+            meta.displayName(nameComponent);
+
+            // Ustawiamy puste lore, żeby meta nie różniła się strukturą od dropu bazowego
             List<String> lore = new ArrayList<>();
+
+            // --- ZASZYWANIE DANYCH LOGICZNYCH W PRZEDMIOCIE (PDC) ---
+            org.bukkit.NamespacedKey typeKey = new org.bukkit.NamespacedKey(this, "gate_type");
+
+            meta.getPersistentDataContainer().set(typeKey, org.bukkit.persistence.PersistentDataType.STRING, type.toUpperCase());
 
             if (type.equals("SENDER") || type.equals("RECEIVER")) {
                 if (args.length < 3) {
@@ -492,7 +509,16 @@ public class AstraRS extends JavaPlugin implements CommandExecutor, TabCompleter
                 lore.add("§7Tryb: §f" + mode);
             }
 
-            meta.setLore(lore);
+            List<String> finalFormattedLore = new ArrayList<>();
+            for (String line : lore) {
+                String formattedLine = org.bukkit.ChatColor.translateAlternateColorCodes('&', line);
+                if (!formattedLine.startsWith("§r")) {
+                    formattedLine = "§r" + formattedLine;
+                }
+                finalFormattedLore.add(formattedLine);
+            }
+
+            meta.setLore(finalFormattedLore);
             item.setItemMeta(meta);
             player.getInventory().addItem(item);
             player.sendMessage(this.getLanguageManager().getWithPrefix("gate-received", "{TYPE}", type));
@@ -532,7 +558,7 @@ public class AstraRS extends JavaPlugin implements CommandExecutor, TabCompleter
                 if (type.matches("CLOCK|CLOCK_GATE|REPEATER")) hints.addAll(Arrays.asList("10t", "1s"));
                 else if (type.equals("MATH")) hints.addAll(Arrays.asList("+", "-", "x", "/", "^"));
                 else if (type.equals("COMPARATOR")) hints.addAll(Arrays.asList(">", "<", "==", "!=", ">=", "<="));
-                else if (type.equals("STRING_COMPARATOR")) hints.addAll(Arrays.asList("==", "EQUALS", "EQUALS_IGNORE_CASE", "=I", "CONTAINS", "STARTS_WITH", "ENDS_WITH", "EMPTY"));
+                else if (type.equals("STRING_COMPARATOR")) hints.addAll(Arrays.asList("EQUALS", "EQUALS_IGNORE_CASE", "CONTAINS", "STARTS_WITH", "ENDS_WITH", "EMPTY"));
                 else if (type.equals("SENSOR")) hints.add("5");
                 else if (type.equals("COUNTER")) hints.add("10");
                 else if (type.equals("NUMBER_GATE")) hints.add("1");

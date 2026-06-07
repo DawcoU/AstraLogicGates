@@ -56,70 +56,91 @@ public class SpaceGates {
 
             // --- SWITCH LOGIKI ---
             switch (type) {
-                case "SENDER":
+                case "SENDER" -> {
                     String rawChannels = config.getString(path + ".channel", "default");
                     String[] splitChannels = rawChannels.split(",");
-                    boolean hasListener = false;
 
-                    // 1. Pobieramy uniwersalny sygnał jako String z tyłu (obsłuży kable danych, liczby, wszystko)
+                    // 1. Pobieramy uniwersalny sygnał jako String z tyłu
                     String incomingData = GateUtils.getStringFrom(gate.getRelative(back), back.getOppositeFace(), plugin);
 
                     // 2. Jeśli z tyłu nie ma sygnału tekstowego, sprawdzamy tradycyjny redstone / dźwignię
                     if (incomingData.isEmpty()) {
                         int traditionalPower = GateUtils.getPowerAt(gate.getRelative(back));
                         if (traditionalPower > 0) {
-                            incomingData = "1"; // Zamieniamy na String "1" dla kompatybilności binarnej
+                            incomingData = "1";
                         }
                     }
 
-                    // 🔥 ZMIANA: Sygnał istnieje, jeśli string nie jest pusty. Zera "0" NIE ignorujemy!
+                    // 🛡SYSTEMOWA OCHRONA KANAŁÓW
+                    if (incomingData.equals("-2147483648") || incomingData.equals("-9223372036854775808")) {
+                        incomingData = "";
+                    }
+
                     boolean hasValue = !incomingData.isEmpty();
 
-                    // 3. Rozsyłamy dane na kanały jako czysty String
-                    for (String chan : splitChannels) {
-                        String trimmed = chan.trim();
+                    // SPRAWDZANIE ZMIANY STANÓW (Aby nadajniki się nie zagłuszały)
+                    String lastTransmitted = config.getString(path + ".current_out", "");
 
-                        // Konsekwentnie zapisujemy jako tekst na kanale
-                        config.set("channels." + trimmed, incomingData);
+                    if (!incomingData.equals(lastTransmitted)) {
+                        // Zapamiętujemy nowy stan tego konkretnego nadajnika w configu
+                        config.set(path + ".current_out", incomingData);
+                        config.set(path + ".state", hasValue);
 
-                        if (config.getBoolean("active_channels." + trimmed, false)) hasListener = true;
-                        config.set("active_channels." + trimmed, null);
+                        // 3. Rozsyłamy dane na kanały tylko przy realnej zmianie!
+                        for (String chan : splitChannels) {
+                            String trimmed = chan.trim();
+                            config.set("channels." + trimmed, incomingData);
+
+                            if (!hasValue) {
+                                config.set("active_channels." + trimmed, null);
+                            }
+                        }
                     }
 
+                    // BEZPIECZNE SPRAWDZANIE CZY KTÓRYKOLWIEK KANAŁ MA AKTYWNEGO ODBIORNIKA
+                    boolean hasListener = false;
+                    for (String chan : splitChannels) {
+                        if (config.getBoolean("active_channels." + chan.trim(), false)) {
+                            hasListener = true;
+                            break; // Znaleźliśmy chociaż jednego odbiorcę, nie trzeba sprawdzać reszty
+                        }
+                    }
+
+                    // Dymek na wyjściu (out) pojawia się TYLKO gdy leci prąd I ktoś go słucha!
                     boolean isTransmitting = hasValue && hasListener;
                     GateUtils.spawnStatusParticle(gate, out, isTransmitting);
-                    GateUtils.spawnStatusParticle(gate, back, hasValue);
-                    newState = false;
-                    break;
 
-                case "RECEIVER":
+                    // Dymek z tyłu (back) informuje o prądzie wejściowym
+                    GateUtils.spawnStatusParticle(gate, back, hasValue);
+
+                    newState = false;
+                }
+
+                case "RECEIVER" -> {
                     String channel = config.getString(path + ".channel", "default").trim().replace(" ", "");
+
                     config.set("active_channels." + channel, true);
 
-                    // 🔥 ZMIANA: Pobieramy dane z kanału zawsze jako String! Domyślnie pustka ""
+                    // Pobieramy dane z kanału zawsze jako String
                     String transmittedData = config.getString("channels." + channel, "");
 
-                    // Transmisja jest aktywna, jeśli kanał nie jest pusty
-                    boolean hasReceivedPower = !transmittedData.isEmpty();
-
-                    newState = hasReceivedPower;
-
-                    // Pobieramy poprzednią wartość z configu odbiornika zawsze jako String
-                    String lastOut = config.getString(path + ".current_out", "");
-
-                    // Porównujemy czyste Stringi – koniec z błędami typów (Integer vs String)!
-                    if (!transmittedData.equals(lastOut)) {
-                        config.set(path + ".current_out", transmittedData);
-                        config.set(path + ".state", hasReceivedPower);
-
-                        // Przekazujemy stan do aktualizacji bloku przed odbiornikiem
-                        GateUtils.updateOutput(plugin, path, target, hasReceivedPower);
+                    //  DODATKOWA OCHRONA ODBIORNIKA
+                    if (transmittedData.equals("-2147483648") || transmittedData.equals("-9223372036854775808")) {
+                        transmittedData = "";
                     }
 
-                    GateUtils.spawnStatusParticle(gate, out, newState);
-                    break;
+                    boolean hasReceivedPower = !transmittedData.isEmpty();
+                    newState = hasReceivedPower;
 
-                case "SENSOR":
+                    config.set(path + ".current_out", transmittedData);
+                    config.set(path + ".state", hasReceivedPower);
+
+                    GateUtils.updateOutput(plugin, path, target, hasReceivedPower);
+
+                    GateUtils.spawnStatusParticle(gate, out, newState);
+                }
+
+                case "SENSOR" -> {
                     int radius = config.getInt(path + ".interval", 5);
                     boolean found = false;
                     for (Entity entity : gate.getWorld().getNearbyEntities(gate.getLocation(), radius, radius, radius)) {
@@ -130,7 +151,7 @@ public class SpaceGates {
                     }
                     newState = found;
                     GateUtils.spawnStatusParticle(gate, out, newState);
-                    break;
+                }
             }
 
             // --- UNIWERSALNA AKTUALIZACJA ---

@@ -1,5 +1,6 @@
 package pl.dawcou.AstraRedstoneSystems.gates;
 
+import org.bukkit.Bukkit;
 import org.bukkit.Color;
 import org.bukkit.Location;
 import org.bukkit.Particle;
@@ -27,7 +28,6 @@ public class DataGates {
         if (gatesSection == null) return;
 
         boolean debug = plugin.getConfig().getBoolean("settings.debug-mode", false);
-        String prefix = "§8[§bAstraRedstoneSystems§8] §7[§dDebug§7] ";
 
         for (String key : gatesSection.getKeys(false)) {
             String path = "gates." + key;
@@ -88,8 +88,8 @@ public class DataGates {
             switch (type) {
                 case "CABLE_DATA" -> {
                     String bestValue = "";
-                    int maxPower = 0;
-                    int myCurrentPower = config.getInt(path + ".power", 0);
+                    long maxPower = 0;
+                    long myCurrentPower = config.getLong(path + ".power", 0);
                     String currentOut = config.getString(path + ".current_out", "");
 
                     for (BlockFace face : BlockFace.values()) {
@@ -108,7 +108,7 @@ public class DataGates {
 
                         String incoming = GateUtils.getStringFrom(neighbor, face.getOppositeFace(), plugin);
 
-                        int neighborPower;
+                        long neighborPower;
                         if (!nType.equals("CABLE_DATA")) {
                             String nOutStr = config.getString(neighborPath + ".out", "NORTH");
                             BlockFace nOut = BlockFace.valueOf(nOutStr.toUpperCase());
@@ -118,10 +118,10 @@ public class DataGates {
                                 neighborPower = 0;
                             }
                         } else {
-                            neighborPower = config.getInt(neighborPath + ".power", 0);
+                            neighborPower = config.getLong(neighborPath + ".power", 0);
                         }
 
-                        // 🔥 BLOKADA ANTY-ECHO / ANTY-SPAM:
+                        // BLOKADA ANTY-ECHO / ANTY-SPAM:
                         // Jeśli sąsiad to kabel, ma taki sam tekst jak nasz obecny i jego moc jest MNIEJSZA lub równa naszej,
                         // to oznacza, że on żywi się NASZYM sygnałem! Ignorujemy go, żeby nie stworzyć pętli zwrotnej.
                         if (nType.equals("CABLE_DATA") && incoming.equals(currentOut) && neighborPower <= myCurrentPower) {
@@ -134,7 +134,7 @@ public class DataGates {
                         }
                     }
 
-                    int newPower = Math.max(0, maxPower - 1);
+                    long newPower = Math.max(0, maxPower - 1);
 
                     // Logika aktualizacji
                     if (!bestValue.equals(currentOut) || newPower != myCurrentPower) {
@@ -142,8 +142,8 @@ public class DataGates {
                         config.set(path + ".power", newPower);
 
                         if (debug) {
-                            org.bukkit.Bukkit.getConsoleSender().sendMessage(
-                                    prefix + "§9CABLE_DATA §7na §e" + key +
+                            Bukkit.getConsoleSender().sendMessage(
+                                    AstraRS.DEBUG_PREFIX + "§9CABLE_DATA §7na §e" + key +
                                             " §7zmienił stan: §b\"" + (bestValue.isEmpty() ? "PUSTY" : bestValue) + "\" §7(Moc: §3" + newPower + "§7)"
                             );
                         }
@@ -157,28 +157,28 @@ public class DataGates {
                 }
 
                 case "DISPLAY" -> {
-                    // 1. Odbieramy uniwersalny tekst/liczbę z tyłu za pomocą metody tekstowej
+                    // 1. Odbieramy uniwersalny tekst/liczbę z tyłu
                     String rawData = GateUtils.getStringFrom(gate.getRelative(back), back.getOppositeFace(), plugin);
 
-                    // POBIERAMY POPRZENIĄ WARTOŚĆ Z CONFIGU DLA SPRAWDZENIA
+                    // 2. Pobieramy poprzednią wartość
                     String lastOut = config.getString(path + ".current_out", "");
 
-                    // URUCHAMIAMY LOGIKĘ TYLKO JEŚLI WARTOŚĆ SIĘ ZMIENIŁA!
                     if (!rawData.equals(lastOut)) {
-                        // 2. Wyciągamy UUID wyświetlacza z configu
                         String uuidStr = config.getString(path + ".displayUUID");
 
-                        // 3. Aktualizujemy napis na hologramie za pomocą metody String z GateUtils
-                        GateUtils.updateDisplayNumber(plugin, uuidStr, rawData);
+                        String formatPattern = plugin.getConfig().getString("gates.data-gates.display.color", "{text}");
 
-                        // 4. Zapisujemy tę wartość jako wyjście bramki (jako uniwersalny String)
+                        String finalValue = rawData.isEmpty() ? "0" : rawData;
+                        String textToParse = formatPattern.replace("{text}", finalValue);
+
+                        String formattedData = plugin.getLanguageManager().parseToLegacy(textToParse);
+
+                        GateUtils.updateDisplayNumber(plugin, uuidStr, formattedData);
                         config.set(path + ".current_out", rawData);
 
-                        // Log wyskoczy TYLKO przy realnej zmianie wyniku! 📺
                         if (debug) {
-                            org.bukkit.Bukkit.getConsoleSender().sendMessage(
-                                    prefix + "§fDISPLAY §7na §e" + key +
-                                            " §7odświeżył tekst na: §a§l" + (rawData.isEmpty() ? "0" : rawData)
+                            Bukkit.getConsoleSender().sendMessage(
+                                    AstraRS.DEBUG_PREFIX + "§fDISPLAY §7na §e" + key + " §7odświeżył tekst na: " + formattedData
                             );
                         }
                     }
@@ -193,31 +193,34 @@ public class DataGates {
                     boolean incomingHasPower = !incomingValue.isEmpty();
 
                     // Blokada z BOKÓW (lewy lub prawy) - używamy metody do zwykłego prądu!
-                    int blockL = GateUtils.getPowerAt(gate.getRelative(s2)); // Lewo
-                    int blockR = GateUtils.getPowerAt(gate.getRelative(s1)); // Prawo
+                    long blockL = GateUtils.getPowerAt(gate.getRelative(s2)); // Lewo
+                    long blockR = GateUtils.getPowerAt(gate.getRelative(s1)); // Prawo
                     boolean isBlocked = (blockL > 0 || blockR > 0);
 
                     // SYSTEMOWA POPRAWKA: Jeśli jest blokada lub brak sygnału z tyłu, wyjściem jest pustka ""
                     String result = (isBlocked || !incomingHasPower) ? "" : incomingValue;
                     boolean hasPower = !result.isEmpty();
 
-                    // Pobieramy poprzednią wartość jako String, domyślnie pusty
                     String lastOut = config.getString(path + ".current_out", "");
+                    boolean lastState = config.getBoolean(path + ".state", false); // <--- POBIERAMY STARY STAN FIZYCZNY
 
+                    // 1. Zapis tekstowy w configu i logi robimy, jeśli zmieniła się treść danych
                     if (!result.equals(lastOut)) {
-                        // PIĘKNY, KOLOROWY LOG DLA TRANZYSTORA 📑
                         if (debug) {
                             String statusColor = isBlocked ? "§c[BLOKADA]" : "§a[PRZEPŁYW]";
-                            org.bukkit.Bukkit.getConsoleSender().sendMessage(
-                                    prefix + "§6TRANSISTOR §7na §e" + key +
+                            Bukkit.getConsoleSender().sendMessage(
+                                    AstraRS.DEBUG_PREFIX + "§6TRANSISTOR §7na §e" + key +
                                             " " + statusColor + " §7Sygnał z tyłu: §b\"" + (incomingValue.isEmpty() ? "BRAK" : incomingValue) + "\"" +
                                             " §7-> Wyjście: §d\"" + (result.isEmpty() ? "PUSTY" : result) + "\""
                             );
                         }
-
                         config.set(path + ".current_out", result);
+                    }
+
+                    // 2. FIZYCZNĄ AKTUALIZACJĘ ŚWIATA ROBIMY TYLKO WTEDY, GDY ZMIENIŁO SIĘ STAN WŁĄCZONY/WYŁĄCZONY!
+                    if (hasPower != lastState) {
                         config.set(path + ".state", hasPower);
-                        GateUtils.updateOutput(plugin, path, target, hasPower);
+                        GateUtils.updateOutput(plugin, path, target, hasPower); // <--- ŚWIAT AKTUALIZUJE SIĘ TYLKO PRZY REALNEJ ZMIANIE SZYNY!
                     }
                 }
 
@@ -238,15 +241,14 @@ public class DataGates {
                             GateUtils.updateOutput(plugin, path, target, false);
 
                             if (debug) {
-                                org.bukkit.Bukkit.getConsoleSender().sendMessage(prefix + "§dVARIABLE §e" + key + " §cZRESETOWANY sygnałem bocznym!");
+                                Bukkit.getConsoleSender().sendMessage(AstraRS.DEBUG_PREFIX + "§dVARIABLE §e" + key + " §cZRESETOWANY sygnałem bocznym!");
                             }
 
                             // Wyczyszczone lokalnie, żeby sekcja poniżej zapisała czysty stan do pliku
                             currentStored = "";
                         }
-                        // 🔥 BRAK RETURN! Pętla leci dalej do punktu 4, żeby zsynchronizować config i cząsteczki!
                     } else {
-                        // 🔥 AKCJA: Dane z tyłu zbieramy i zapisujemy TYLKO wtedy, gdy NIE MA RESETU!
+                        // AKCJA: Dane z tyłu zbieramy i zapisujemy TYLKO wtedy, gdy NIE MA RESETU!
                         // 2. Pobieramy dane z wejścia (tył) jako uniwersalny tekst/liczba
                         String incoming = GateUtils.getStringFrom(gate.getRelative(back), back.getOppositeFace(), plugin);
 
@@ -256,7 +258,7 @@ public class DataGates {
                                 config.set(path + ".value", incoming);
                                 currentStored = incoming;
                                 if (debug) {
-                                    org.bukkit.Bukkit.getConsoleSender().sendMessage(prefix + "§dVARIABLE §e" + key + " §7zapisała nową wartość: §b\"" + incoming + "\"");
+                                    Bukkit.getConsoleSender().sendMessage(AstraRS.DEBUG_PREFIX + "§dVARIABLE §e" + key + " §7zapisała nową wartość: §b\"" + incoming + "\"");
                                 }
                             }
                         }
@@ -279,21 +281,19 @@ public class DataGates {
 
                 case "BATTERY" -> {
                     // --- ODCZYT I INICJALIZACJA DANYCH ---
-                    int charge = config.getInt(path + ".charge", 0);
-                    long lastChargeTick = config.getLong(path + ".last_charge_tick", 0);
-                    long lastDecay = config.getLong(path + ".last_decay", 0);
+                    long charge = config.getLong(path + ".charge", 0L);
+                    long lastChargeTick = config.getLong(path + ".last_charge_tick", 0L);
+                    long lastDecay = config.getLong(path + ".last_decay", 0L);
                     long currentTime = System.currentTimeMillis();
 
-                    // 1. Czas rozładowywania (w minutach) -> zamieniamy na milisekundy
-                    int configDecayMinutes = plugin.getConfig().getInt("gates.data-gates.battery.decay-time-minutes", 5);
-                    long decayInterval = (long) configDecayMinutes * 60 * 1000;
+                    long configDecayMinutes = plugin.getConfig().getLong("gates.data-gates.battery.decay-time-minutes", 5L);
+                    long decayInterval = configDecayMinutes * 60L * 1000L;
 
-                    // 2. NOWA OPCJA: Czas ładowania ze stałego źródła (w sekundach) -> zamieniamy na milisekundy
-                    int configChargeSeconds = plugin.getConfig().getInt("gates.data-gates.battery.charge-time-seconds", 5);
-                    long chargeInterval = (long) configChargeSeconds * 1000;
+                    long configChargeSeconds = plugin.getConfig().getLong("gates.data-gates.battery.charge-time-seconds", 5L);
+                    long chargeInterval = configChargeSeconds * 1000L;
 
                     // Jeśli bateria jest tworzona po raz pierwszy, ustawiamy czas decay na aktualny
-                    if (lastDecay == 0) {
+                    if (lastDecay == 0L) {
                         config.set(path + ".last_decay", currentTime);
                         lastDecay = currentTime;
                     }
@@ -309,37 +309,37 @@ public class DataGates {
                             // PRIORYTET: Ładowarka działa! Blokujemy spadek energii i przesuwamy czas na teraz
                             config.set(path + ".last_decay", currentTime);
                             if (debug) {
-                                org.bukkit.Bukkit.getConsoleSender().sendMessage(
-                                        prefix + "§eBATTERY §7na §e" + key + " §bBlokada spadku energii - trwa ładowanie."
+                                Bukkit.getConsoleSender().sendMessage(
+                                        AstraRS.DEBUG_PREFIX + "§eBATTERY §7na §e" + key + " §bBlokada spadku energii - trwa ładowanie."
                                 );
                             }
-                        } else if (charge > 0) {
+                        } else if (charge > 0L) {
                             // Brak ładowania, bateria ma prąd -> rozładowujemy o 1%
-                            charge = Math.max(0, charge - 1);
+                            charge = Math.max(0L, charge - 1L);
                             config.set(path + ".charge", charge);
                             config.set(path + ".last_decay", currentTime);
 
                             if (debug) {
-                                org.bukkit.Bukkit.getConsoleSender().sendMessage(
-                                        prefix + "§eBATTERY §7na §e" + key + " §cStraciła 1% energii (Brak zasilania). Stan: §b" + charge + "%"
+                                Bukkit.getConsoleSender().sendMessage(
+                                        AstraRS.DEBUG_PREFIX + "§eBATTERY §7na §e" + key + " §cStraciła 1% energii (Brak zasilania). Stan: §b" + charge + "%"
                                 );
                             }
                         } else {
-                            // Bateria pusta i brak zasilania -> przesuwamy czas o interwał (ochrona dysku)
+                            // Bateria pusta i brak zasilania -> przesuwamy czas o interval (ochrona dysku)
                             config.set(path + ".last_decay", lastDecay + decayInterval);
                         }
                     }
 
                     // --- 2. MECHANIZM STAŁEGO ŁADOWANIA (Czas brany z nowej opcji w configu!) ---
                     if (isInputPowered && (currentTime - lastChargeTick >= chargeInterval)) {
-                        if (charge < 100) {
-                            charge = Math.min(100, charge + 1);
+                        if (charge < 100L) {
+                            charge = Math.min(100L, charge + 1L);
                             config.set(path + ".charge", charge);
                             config.set(path + ".last_charge_tick", currentTime);
 
                             if (debug) {
-                                org.bukkit.Bukkit.getConsoleSender().sendMessage(
-                                        prefix + "§eBATTERY §7na §e" + key + " §aŁadowanie sieciowe... Stan: §b" + charge + "%"
+                                Bukkit.getConsoleSender().sendMessage(
+                                        AstraRS.DEBUG_PREFIX + "§eBATTERY §7na §e" + key + " §aŁadowanie sieciowe... Stan: §b" + charge + "%"
                                 );
                             }
                         } else {
@@ -348,7 +348,7 @@ public class DataGates {
                     }
 
                     // --- 3. LOGIKA WYJŚCIA ---
-                    boolean hasPower = charge > 0;
+                    boolean hasPower = charge > 0L;
                     boolean previousState = config.getBoolean(path + ".state", false);
 
                     if (hasPower != previousState) {
@@ -357,8 +357,8 @@ public class DataGates {
 
                         if (debug) {
                             String powerStatus = hasPower ? "§aWŁĄCZONE" : "§cWYŁĄCZONE (0%)";
-                            org.bukkit.Bukkit.getConsoleSender().sendMessage(
-                                    prefix + "§eBATTERY §7na §e" + key + " §7zmieniła stan wyjściowy na: " + powerStatus
+                            Bukkit.getConsoleSender().sendMessage(
+                                    AstraRS.DEBUG_PREFIX + "§eBATTERY §7na §e" + key + " §7zmieniła stan wyjściowy na: " + powerStatus
                             );
                         }
                     }

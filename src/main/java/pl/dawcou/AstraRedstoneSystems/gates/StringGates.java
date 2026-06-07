@@ -1,5 +1,6 @@
 package pl.dawcou.AstraRedstoneSystems.gates;
 
+import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
@@ -25,7 +26,6 @@ public class StringGates {
         if (gatesSection == null) return;
 
         boolean debug = plugin.getConfig().getBoolean("settings.debug-mode", false);
-        String prefix = "§8[§bAstraRedstoneSystems§8] §7[§dDebug§7] ";
 
         for (String key : gatesSection.getKeys(false)) {
             String path = "gates." + key;
@@ -37,7 +37,7 @@ public class StringGates {
             Block gate = loc.getBlock();
             String type = config.getString(path + ".type", "").toUpperCase();
 
-            // Interesują nas TYLKO czyste bramki tekstowe
+            // longeresują nas TYLKO czyste bramki tekstowe
             if (!type.matches("STRING_GATE|STRING_COMPARATOR|STRING_DECODER")) continue;
 
             // --- INICJALIZACJA KIERUNKÓW ---
@@ -52,14 +52,14 @@ public class StringGates {
 
             // --- EFEKTY WIZUALNE STATUSU (ZABEZPIECZONE WARUNKAMI) ---
 
-            // 1. Cząsteczki WYJŚCIA - odpalamy tylko dla STRING_GATE i STRING_COMPARATOR
-            if (type.matches("STRING_GATE|STRING_COMPARATOR")) {
+            // 1. Cząsteczki WYJŚCIA - odpalamy tylko dla STRING_GATE STRING_COMPARATOR i STRING_DECODER
+            if (type.matches("STRING_GATE|STRING_COMPARATOR|STRING_DECODER")) {
                 GateUtils.spawnStatusParticle(gate, out, currentState);
             }
 
             // 2. Cząsteczki WEJŚCIA Z TYŁU
             boolean pBack = GateUtils.getPowerAt(gate.getRelative(back)) > 0;
-            if (type.matches("STRING_GATE")) {
+            if (type.matches("STRING_GATE|STRING_DECODER")) {
                 String sBack = GateUtils.getStringFrom(gate.getRelative(back), back.getOppositeFace(), plugin);
                 GateUtils.spawnStatusParticle(gate, back, pBack || !sBack.isEmpty());
             }
@@ -81,8 +81,8 @@ public class StringGates {
 
                     if (!finalText.equals(lastOut)) {
                         if (debug) {
-                            org.bukkit.Bukkit.getConsoleSender().sendMessage(
-                                    prefix + "§dSTRING_GATE §7na §e" + key + " §7wypuścił tekst: §5\"" + finalText + "\""
+                            Bukkit.getConsoleSender().sendMessage(
+                                    AstraRS.DEBUG_PREFIX + "§dSTRING_GATE §7na §e" + key + " §7wypuścił tekst: §5\"" + finalText + "\""
                             );
                         }
                         config.set(path + ".current_out", finalText);
@@ -97,36 +97,38 @@ public class StringGates {
                     String sR = GateUtils.getStringFrom(gate.getRelative(s1), s1.getOppositeFace(), plugin);
                     String mode = config.getString(path + ".mode", "EQUALS").toUpperCase();
 
-                    // OCHRONA: Jeśli główny lewy string jest pusty, natychmiast gasimy bramkę (odpowiednik Integer.MIN_VALUE)
+                    // OCHRONA: Jeśli główny lewy string jest pusty, natychmiast gasimy bramkę
                     if (sL.isEmpty()) {
-                        if (!"".equals(config.getString(path + ".current_out", ""))) {
+                        String currentOut = config.getString(path + ".current_out", "");
+
+                        if (!currentOut.isEmpty()) {
                             config.set(path + ".current_out", "");
                             config.set(path + ".state", false);
                             GateUtils.updateOutput(plugin, path, target, false);
                         }
-                        return;
+                        continue;
                     }
 
-                    // 2. Logika porównania (Zmienione aliasy, usunięty tryb EMPTY, bo brak sL kończy działanie wyżej)
+                    // 2. Logika porównania
                     boolean result = switch (mode) {
-                        case "EQUALS", "=="              -> sL.equals(sR);
-                        case "EQUALS_IGNORE_CASE", "=I" -> sL.equalsIgnoreCase(sR);
-                        case "CONTAINS"                 -> sL.contains(sR);
-                        case "STARTS_WITH"              -> sL.startsWith(sR);
-                        case "ENDS_WITH"                -> sL.endsWith(sR);
-                        default                         -> false;
+                        case "EQUALS"              -> sL.equals(sR);
+                        case "EQUALS_IGNORE_CASE"  -> sL.equalsIgnoreCase(sR);
+                        case "CONTAINS"            -> sL.contains(sR);
+                        case "STARTS_WITH"         -> sL.startsWith(sR);
+                        case "ENDS_WITH"           -> sL.endsWith(sR);
+                        default                    -> false;
                     };
 
-                    // 3. Ustalenie co leci na wyjście danych: jeśli SUKCES to cały lewy string, jeśli FAŁSZ to pustka ""
+                    // 3. Ustalenie co leci na wyjście danych
                     String finalVal = result ? sL : "";
                     String lastOutStr = config.getString(path + ".current_out", "");
 
-                    // 4. Aktualizacja stanu i wyjścia (odpalana tylko przy realnej zmianie wartości tekstowej)
+                    // 4. Aktualizacja stanu i wyjścia
                     if (!finalVal.equals(lastOutStr)) {
                         if (debug) {
                             String matchColor = result ? "§a" : "§c";
-                            org.bukkit.Bukkit.getConsoleSender().sendMessage(
-                                    prefix + "§dSTRING_COMP §7na §e" + key + " §7wynik (§6" + mode + "§7): " + matchColor + (result ? "TRUE" : "FALSE") + " §8[Wysyła: \"" + finalVal + "\"]"
+                            Bukkit.getConsoleSender().sendMessage(
+                                    AstraRS.DEBUG_PREFIX + "§dSTRING_COMP §7na §e" + key + " §7wynik (§6" + mode + "§7): " + matchColor + (result ? "TRUE" : "FALSE") + " §8[Wysyła: \"" + finalVal + "\"]"
                             );
                         }
                         config.set(path + ".current_out", finalVal);
@@ -144,7 +146,6 @@ public class StringGates {
                     boolean isMatch = !incoming.isEmpty() && incoming.equals(targetValue);
                     String finalVal = isMatch ? "1" : "";
 
-                    // Zmieniono "-1" na "" (pusty string), żeby było spójne z resztą systemu
                     String lastOut = config.getString(path + ".current_out", "");
 
                     if (!finalVal.equals(lastOut)) {

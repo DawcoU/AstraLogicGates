@@ -5,13 +5,11 @@ import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
-import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.TextDisplay;
 
-import java.util.List;
 import java.util.UUID;
 
 public class GateUtils {
@@ -32,6 +30,12 @@ public class GateUtils {
                 return torch.isLit() ? 15 : 0;
             }
         }
+
+        // --- NOWY WARUNEK: Dźwignie, guziki, płyty naciskowe ---
+        if (b.getBlockData() instanceof org.bukkit.block.data.Powerable powerable) {
+            return powerable.isPowered() ? 15 : 0;
+        }
+
         return b.getBlockPower();
     }
 
@@ -43,10 +47,10 @@ public class GateUtils {
         if (!config.contains(path)) return "";
 
         // 1. Sprawdzamy link (bezprzewodowy)
-        int wireless = config.getInt(path + ".link_input", Integer.MIN_VALUE);
+        long wireless = config.getLong(path + ".link_input", Long.MIN_VALUE);
 
         // Jeśli jest sygnał bezprzewodowy, zwróć go
-        if (wireless != Integer.MIN_VALUE) {
+        if (wireless != Long.MIN_VALUE) {
             return String.valueOf(wireless);
         }
 
@@ -61,7 +65,7 @@ public class GateUtils {
             String cleanVal = physical.replaceAll("[^0-9\\-]", "");
 
             if (!cleanVal.isEmpty() && !cleanVal.equals("-")) {
-                if (Integer.parseInt(cleanVal) == Integer.MIN_VALUE) {
+                if (Long.parseLong(cleanVal) == Long.MIN_VALUE) {
                     return "";
                 }
             }
@@ -72,27 +76,28 @@ public class GateUtils {
         return physical;
     }
 
-    public static int getNumberFrom(Block block, BlockFace fromFace, AstraRS plugin) {
+    public static long getNumberFrom(Block block, BlockFace fromFace, AstraRS plugin) {
         // Korzystamy z jednego źródła prawdy
         String val = getStringFrom(block, fromFace, plugin);
 
-        if (val.isEmpty()) return Integer.MIN_VALUE;
+        if (val.isEmpty()) return Long.MIN_VALUE;
 
         try {
             String cleanVal = val.replaceAll("[^0-9\\-]", "");
 
             // Jeśli po wyczyszczeniu został pusty tekst (np. ktoś wysłał same litery "ABC")
             if (cleanVal.isEmpty() || cleanVal.equals("-")) {
-                return Integer.MIN_VALUE;
+                return Long.MIN_VALUE;
             }
 
-            return Integer.parseInt(cleanVal);
+            return Long.parseLong(cleanVal);
         } catch (NumberFormatException e) {
-            return Integer.MIN_VALUE; // W razie jakiegokolwiek błędu zwracamy brak danych
+            e.printStackTrace();
+            return Long.MIN_VALUE; // W razie jakiegokolwiek błędu zwracamy brak danych
         }
     }
 
-    public static int getCustomOrRedstonePower(AstraRS plugin, Block block) {
+    public static long getCustomOrRedstonePower(AstraRS plugin, Block block) {
         String key = locToStr(block.getLocation());
         String path = "gates." + key;
 
@@ -100,7 +105,7 @@ public class GateUtils {
             // Wyciągamy jako String i parsujemy bezpiecznie!
             String val = plugin.getGatesConfig().getString(path + ".current_out", "0");
             try {
-                return Integer.parseInt(val);
+                return Long.parseLong(val);
             } catch (NumberFormatException e) {
                 return 0;
             }
@@ -140,60 +145,74 @@ public class GateUtils {
         }
     }
 
-    public static void spawnStatusParticle(Block gate, BlockFace face, boolean active) {
-        Location loc = gate.getLocation().add(0.5, 0.5, 0.5);
-        loc.add(face.getDirection().multiply(0.51));
-        org.bukkit.Particle.DustOptions dust = active ?
-                new org.bukkit.Particle.DustOptions(org.bukkit.Color.LIME, 1.4F) :
-                new org.bukkit.Particle.DustOptions(org.bukkit.Color.RED, 1.4F);
-        gate.getWorld().spawnParticle(org.bukkit.Particle.REDSTONE, loc, 2, 0, 0, 0, 0, dust);
+    public static void spawnStatusParticle(Block gate, BlockFace face, Boolean active) {
+        try {
+            Location loc = gate.getLocation().add(0.5, 0.5, 0.5);
+            loc.add(face.getDirection().multiply(0.51));
+
+            // Określamy kolor na podstawie stanu: true -> LIME, false -> RED
+            org.bukkit.Color color;
+            if (active) {
+                color = org.bukkit.Color.LIME; // Stan włączony 🟢
+            } else {
+                color = org.bukkit.Color.RED;  // Stan wyłączony 🔴
+            }
+
+            org.bukkit.Particle.DustOptions dust = new org.bukkit.Particle.DustOptions(color, 1.4F);
+
+            // Uniwersalny i bezpieczny spawn cząsteczek (obsługuje DUST i stary REDSTONE w try-catch)
+            try {
+                org.bukkit.Particle dustParticle = org.bukkit.Particle.valueOf("DUST");
+                gate.getWorld().spawnParticle(dustParticle, loc, 2, 0, 0, 0, 0, dust);
+            } catch (IllegalArgumentException e) {
+                gate.getWorld().spawnParticle(org.bukkit.Particle.valueOf("REDSTONE"), loc, 2, 0, 0, 0, 0, dust);
+            }
+        } catch (Exception e) {
+            // Zabezpieczenie przed uwaleniem pętli
+        }
     }
 
     public static void updateDisplayNumber(AstraRS plugin, String uuidStr, String value) {
         if (uuidStr == null || uuidStr.isEmpty()) return;
-
-        // Jeśli nie ma wartości (null lub pusta), dajemy po prostu zwykłe "0"
-        if (value == null || value.isEmpty()) {
-            value = "0";
-        }
 
         try {
             UUID uuid = UUID.fromString(uuidStr);
             Entity entity = Bukkit.getEntity(uuid);
 
             if (entity instanceof TextDisplay display) {
-                display.setText("§f" + value);
+                // Po prostu ustawiamy to, co dostaliśmy - łącznie z kolorami i "0"
+                display.text(net.kyori.adventure.text.Component.text(value));
             }
         } catch (Exception e) {
-            // Ciche ignorowanie, jeśli UUID jest trefne
+            // Ciche ignorowanie
         }
     }
 
     public static void updateOutput(AstraRS plugin, String path, Block target, boolean p) {
         FileConfiguration config = plugin.getGatesConfig();
-
-        // 1. POBIERAMY TYP ZAPISANY W CONFIGU DLA TEJ ŚCIEŻKI
         String type = config.getString(path + ".type", "");
 
-        // 3. BLOKADA - jeśli to kabel, wychodzimy ZANIM cokolwiek zmienimy
         if (type.equalsIgnoreCase("CABLE_DATA")) {
             return;
         }
 
-        // Celujemy w blok POD tym, co podaliśmy jako target
         Block powerBlock = target.getRelative(BlockFace.DOWN);
 
         if (p) {
-            // Zapisujemy co tam jest TERAZ (np. Grass), zanim damy redstone
             if (powerBlock.getType() != Material.REDSTONE_BLOCK) {
                 config.set(path + ".oldBlock", powerBlock.getType().name());
                 plugin.saveGates();
+                powerBlock.setType(Material.REDSTONE_BLOCK); // Podmieniamy TYLKO jeśli to nie był redstone
             }
-            powerBlock.setType(Material.REDSTONE_BLOCK);
         } else {
-            // Przywracamy z pamięci
             String matName = config.getString(path + ".oldBlock", "AIR");
-            powerBlock.setType(Material.valueOf(matName));
+            Material targetMaterial = Material.valueOf(matName);
+
+            // POPRAWKA: Podmieniaj na stary blok TYLKO wtedy, gdy w świecie AKTUALNIE leży REDSTONE_BLOCK!
+            // Jeśli leży tam coś innego (bo gracz to zmienił WorldEditem lub zniszczył), to nie ruszamy!
+            if (powerBlock.getType() == Material.REDSTONE_BLOCK) {
+                powerBlock.setType(targetMaterial);
+            }
         }
     }
 }

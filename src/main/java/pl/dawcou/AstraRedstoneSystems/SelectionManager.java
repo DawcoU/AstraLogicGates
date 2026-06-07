@@ -23,8 +23,8 @@ import java.util.*;
 
 public class SelectionManager implements Listener {
 
-    private final AstraRS plugin; // Nazwa Twojej głównej klasy
-    private final Map<UUID, Location[]> selections = new HashMap<>(); //
+    private final AstraRS plugin;
+    private final Map<UUID, Location[]> selections = new HashMap<>();
     private final Map<UUID, List<Location>> pasteHistory = new HashMap<>();
     private final Map<UUID, Map<Location, ConfigurationSection>> redoHistory = new HashMap<>();
     private final Map<UUID, Map<org.bukkit.util.Vector, ConfigurationSection>> clipboard = new HashMap<>();
@@ -39,13 +39,21 @@ public class SelectionManager implements Listener {
         ItemMeta meta = stick.getItemMeta();
 
         if (meta != null) {
-            meta.setDisplayName("§eSelektor Bramek");
+            // Pobieramy nazwę selektora bezpośrednio z klasy językowej
+            String langName = plugin.getLanguageManager().getMessage("selector-item-name");
+            if (langName == null || langName.isEmpty()) {
+                langName = "&dSelektor Bramek"; // Backup, gdyby klucza zabrakło
+            }
 
-            // Używamy Enchantment.LUCK (standardowa nazwa w nowszych wersjach)
-            // Jeśli nadal sypie błędem, sprawdź podpowiedzi IDE, bo nazwy różnią się między wersjami silnika
+            meta.displayName(net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer.legacyAmpersand().deserialize(langName));
+
+            // ZASZYWANIE DANYCH W PRZEDMIOCIE (PDC)
+            // Tworzymy unikalny klucz logiczny
+            org.bukkit.NamespacedKey key = new org.bukkit.NamespacedKey(plugin, "item_type");
+            meta.getPersistentDataContainer().set(key, org.bukkit.persistence.PersistentDataType.STRING, "gate_selector");
+
+            // Efekt świecenia
             meta.addEnchant(Enchantment.LUCK, 1, true);
-
-            // Ta flaga sprawia, że napis "Luck I" nie pojawia się w opisie przedmiotu
             meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
 
             stick.setItemMeta(meta);
@@ -60,10 +68,32 @@ public class SelectionManager implements Listener {
         Player player = event.getPlayer();
         ItemStack item = event.getItem();
 
-        if (item == null || !item.hasItemMeta() || !item.getItemMeta().getDisplayName().equals("§eSelektor Bramek")) return;
+        // Szybki powrót, jeśli gracz klika powietrze pusta ręką
+        if (item == null || !item.hasItemMeta()) return;
+
+        ItemMeta currentMeta = item.getItemMeta();
+        if (currentMeta == null) return;
+
+        // 1. SPRAWDZAMY UKRYTE DANE PDC ZAMIAST TEXTU NAZWY
+        org.bukkit.NamespacedKey key = new org.bukkit.NamespacedKey(plugin, "item_type");
+        if (!currentMeta.getPersistentDataContainer().has(key, org.bukkit.persistence.PersistentDataType.STRING)) return;
+
+        String itemType = currentMeta.getPersistentDataContainer().get(key, org.bukkit.persistence.PersistentDataType.STRING);
+        if (!"gate_selector".equals(itemType)) return;
+
+        // 2. POTĘŻNA BLOKADA BEZPIECZEŃSTWA (PERMISJA)
+        // Sprawdzamy ją OD RAZU po wykryciu, że to na pewno jest nasz selektor
+        if (!player.hasPermission("astrars.admin")) {
+            player.sendMessage(plugin.getLanguageManager().getWithPrefix("no-permission"));
+            return;
+        }
+
+        // Jeśli nie kliknął bloku (np. kliknął powietrze), przerywamy dalszą logikę pozycji
         if (event.getClickedBlock() == null) return;
 
+        // Blokujemy domyślne akcje Minecrafta dla patyka (np. uderzanie bloków)
         event.setCancelled(true);
+
         UUID uuid = player.getUniqueId();
         Location clickedLoc = event.getClickedBlock().getLocation();
 
@@ -191,7 +221,6 @@ public class SelectionManager implements Listener {
 
         if (gates != null) {
             for (String key : gates.getKeys(false)) {
-                // 1. ZAMIAST key.contains("_") - używamy strToLoc
                 Location gateLoc = GateUtils.strToLoc(key);
                 if (gateLoc == null) continue; // Ignorujemy śmieci, które nie są lokacją
 

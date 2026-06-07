@@ -22,10 +22,7 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.util.Transformation;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 
 public class GateListener implements Listener {
 
@@ -47,7 +44,7 @@ public class GateListener implements Listener {
         if (!config.contains(originalPath)) return;
 
         String currentPath = originalPath;
-        Block mainBlock = brokenBlock; // Domyślnie to, co rozwaliliśmy
+        Block mainBlock = brokenBlock;
 
         // 2. Obsługa "Dziecka" (odnogi Synchronizera)
         if (config.contains(originalPath + ".parent")) {
@@ -91,7 +88,6 @@ public class GateListener implements Listener {
                 // Gasimy też środek synchronizera (ważne, by przywrócić tam blok!)
                 if (parentLoc != null) GateUtils.updateOutput(plugin, currentPath, parentLoc.getBlock().getRelative(faceOut), false);
             } else {
-                // Poprawiona logika dla zwykłych bramek
                 if (parentLoc != null) {
                     GateUtils.updateOutput(plugin, currentPath, parentLoc.getBlock().getRelative(faceOut), false);
                 }
@@ -135,24 +131,41 @@ public class GateListener implements Listener {
                 }
             }
 
-            // Usuwanie linków Bluetooth
-            ConfigurationSection gatesSection = config.getConfigurationSection("gates");
-            if (gatesSection != null) {
-                String targetToUnlink = currentPath.replace("gates.", "");
-                for (String key : gatesSection.getKeys(false)) {
-                    if (targetToUnlink.equals(config.getString("gates." + key + ".target_link"))) {
-                        config.set("gates." + key + ".target_link", null);
-                    }
-                }
-            }
-
             // Drop przedmiotu
             List<String> savedLore = config.getStringList(currentPath + ".lore");
             ItemStack item = new ItemStack(mainBlock.getType() == Material.AIR ? brokenBlock.getType() : mainBlock.getType());
             ItemMeta meta = item.getItemMeta();
             if (meta != null) {
-                meta.setDisplayName("§eBramka: §6" + type.toUpperCase());
-                meta.setLore(savedLore);
+                // 1. Pobieramy prefiks z pliku językowego
+                String langPrefix = plugin.getLanguageManager().getMessage("gate-item-name-prefix");
+                if (langPrefix == null || langPrefix.isEmpty()) {
+                    langPrefix = "&4Bramka: &c";
+                }
+
+                // 2. Deserializujemy tekst
+                net.kyori.adventure.text.Component nameComponent = net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer.legacyAmpersand()
+                        .deserialize(langPrefix + type.toUpperCase());
+
+                // 3. BLOKADA POCHYLENIA TEKSTU (Wyłączamy kursywę Adventure)
+                nameComponent = nameComponent.decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false);
+
+                meta.displayName(nameComponent);
+
+                // Konwertujemy lore z configu na tradycyjne, czyste Stringi z sekcjami kolorów (§)
+                List<String> formattedLore = new ArrayList<>();
+                for (String line : savedLore) {
+                    String formattedLine = org.bukkit.ChatColor.translateAlternateColorCodes('&', line);
+                    if (!formattedLine.startsWith("§r")) {
+                        formattedLine = "§r" + formattedLine;
+                    }
+                    formattedLore.add(formattedLine);
+                }
+                meta.setLore(formattedLore);
+
+                // --- WPISANIE DANYCH PDC PRZED USUNIĘCIEM BLOKU ---
+                org.bukkit.NamespacedKey typeKey = new org.bukkit.NamespacedKey(plugin, "gate_type");
+                meta.getPersistentDataContainer().set(typeKey, org.bukkit.persistence.PersistentDataType.STRING, type.toUpperCase());
+
                 item.setItemMeta(meta);
             }
             brokenBlock.getWorld().dropItemNaturally(brokenBlock.getLocation(), item);
@@ -227,209 +240,239 @@ public class GateListener implements Listener {
         ItemStack item = e.getItemInHand();
         if (!item.hasItemMeta()) return;
         ItemMeta meta = item.getItemMeta();
-        if (meta == null || !meta.hasDisplayName()) return;
+        if (meta == null) return;
 
-        String name = meta.getDisplayName();
-        if (name.startsWith("§eBramka: §6")) {
-            String type = name.replace("§eBramka: §6", "").toUpperCase();
-            Block block = e.getBlock();
-            String path = "gates." + GateUtils.locToStr(block.getLocation());
+        // 1. SPRAWDZAMY, CZY PRZEDMIOT MA NASZ UKRYTY KLUCZ TYPU BRAMKI
+        org.bukkit.NamespacedKey typeKey = new org.bukkit.NamespacedKey(plugin, "gate_type");
+        if (!meta.getPersistentDataContainer().has(typeKey, org.bukkit.persistence.PersistentDataType.STRING)) return;
 
-            FileConfiguration config = plugin.getGatesConfig();
+        // 2. ODCZYTUJEMY TYP (Zawsze wielkimi literami, np. "NOT", "TRANSISTOR")
+        String type = meta.getPersistentDataContainer().get(typeKey, org.bukkit.persistence.PersistentDataType.STRING);
+        if (type == null || type.isEmpty()) return;
 
-            // Zawsze zapisujemy typ, bo to podstawa
-            BlockFace outFace = GateUtils.getDirection(e.getPlayer());
-            config.set(path + ".type", type);
+        // --- LOGIKA STAWIANIA BRAMKI ---
+        Block block = e.getBlock();
+        String path = "gates." + GateUtils.locToStr(block.getLocation());
 
-            // --- WYJĄTEK DLA KABLA ---
-            if (type.equals("CABLE_DATA")) {
-                // KABEL: Nie potrzebuje kierunku (out), stanu (state) ani zapisu bloku pod spodem
-                config.set(path + ".current_out", "0");
-                config.set(path + ".power", 0);
+        FileConfiguration config = plugin.getGatesConfig();
 
-            } else if (type.equals("DISPLAY")) {
-                config.set(path + ".out", outFace.name());
-                config.set(path + ".current_out", "0");
+        // Zawsze zapisujemy typ, bo to podstawa
+        BlockFace outFace = GateUtils.getDirection(e.getPlayer());
+        config.set(path + ".type", type.toUpperCase());
 
-                // Ustalenie bloku wyjściowego na podstawie outFace
-                Block target = block.getRelative(outFace);
-                Block outputBlock = target.getRelative(BlockFace.DOWN);
-                config.set(path + ".oldBlock", outputBlock.getType().name());
+        // --- WYJĄTEK DLA KABLA ---
+        if (type.equals("CABLE_DATA")) {
+            // KABEL: Nie potrzebuje kierunku (out), stanu (state) ani zapisu bloku pod spodem
+            config.set(path + ".current_out", "0");
+            config.set(path + ".power", 0);
 
-            } else {
-                // INNE BRAMKI: Używają outFace do ustalenia wyjścia
-                config.set(path + ".out", outFace.name());
-                config.set(path + ".state", false);
-                config.set(path + ".current_out", "0");
+        } else if (type.equals("DISPLAY")) {
+            config.set(path + ".out", outFace.name());
+            config.set(path + ".current_out", "0");
 
-                // Ustalenie bloku wyjściowego na podstawie outFace
-                Block target = block.getRelative(outFace);
-                Block outputBlock = target.getRelative(BlockFace.DOWN);
-                config.set(path + ".oldBlock", outputBlock.getType().name());
+            // Ustalenie bloku wyjściowego na podstawie outFace
+            Block target = block.getRelative(outFace);
+            Block outputBlock = target.getRelative(BlockFace.DOWN);
+            config.set(path + ".oldBlock", outputBlock.getType().name());
+
+        } else {
+            // INNE BRAMKI: Używają outFace do ustalenia wyjścia
+            config.set(path + ".out", outFace.name());
+            config.set(path + ".state", false);
+            config.set(path + ".current_out", "0");
+
+            // Ustalenie bloku wyjściowego na podstawie outFace
+            Block target = block.getRelative(outFace);
+            Block outputBlock = target.getRelative(BlockFace.DOWN);
+            config.set(path + ".oldBlock", outputBlock.getType().name());
+        }
+
+        // Zapisujemy Lore dla potrzeb onBreak (odzyskiwanie przedmiotu)
+        if (meta.hasLore()) {
+            // 1. Pobieramy komponenty z lore i bezpiecznie mapujemy je na zwykłe Stringi z kolorami '&'
+            java.util.List<String> plainLore = meta.lore() != null ? meta.lore().stream()
+                    .map(comp -> net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer.legacyAmpersand().serialize(comp))
+                    .toList() : new java.util.ArrayList<>();
+
+            // 2. Zapisujemy czystą listę Stringów bezpośrednio do pliku logic_gates.yml
+            config.set(path + ".lore", plainLore);
+        }
+
+        // --- LOGIKA SPECJALNA DLA TYPÓW ---
+        if ("SYNCHRONIZER".equals(type)) {
+            BlockFace left = GateUtils.rotate90(outFace).getOppositeFace();
+            BlockFace right = GateUtils.rotate90(outFace);
+
+            Block leftSide = block.getRelative(left);
+            Block rightSide = block.getRelative(right);
+
+            leftSide.setType(block.getType());
+            rightSide.setType(block.getType());
+
+            String locL = GateUtils.locToStr(leftSide.getLocation());
+            String locR = GateUtils.locToStr(rightSide.getLocation());
+            String locMain = GateUtils.locToStr(block.getLocation());
+
+            // --- TO DOPISZ, ŻEBY NAPRAWIĆ BETON ---
+
+            // 1. Zapis dla lewej strony
+            Block targetL = leftSide.getRelative(outFace); // Blok przed lewym bokiem
+            config.set("gates." + locL + ".oldBlock", targetL.getRelative(BlockFace.DOWN).getType().name());
+
+            // 2. Zapis dla prawej strony
+            Block targetR = rightSide.getRelative(outFace); // Blok przed prawym bokiem
+            config.set("gates." + locR + ".oldBlock", targetR.getRelative(BlockFace.DOWN).getType().name());
+
+            // 3. Zapis dla środka (już masz path zdefiniowane wyżej w onPlace)
+            Block targetMain = block.getRelative(outFace);
+            config.set(path + ".oldBlock", targetMain.getRelative(BlockFace.DOWN).getType().name());
+
+            config.set("gates." + locL + ".out", outFace.name());
+            config.set("gates." + locR + ".out", outFace.name());
+            config.set("gates." + locL + ".parent", locMain);
+            config.set("gates." + locR + ".parent", locMain);
+            config.set(path + ".sideL", locL);
+            config.set(path + ".sideR", locR);
+        }
+
+        if ("DISPLAY".equals(type)) {
+            World world = block.getWorld();
+
+            // 1. Zaczynamy na środku bloku i podnosimy o 2 bloki w górę (oś Y)
+            Location displayLoc = block.getLocation().clone().add(0.5, 2.0, 0.5);
+
+            // 2. Pobieramy kierunek wyjścia bramki z configu
+            String outName = config.getString(path + ".out", "NORTH");
+
+            // 3. Sprawdzamy kierunek i przesuwamy o 2 bloki dalej przed wyjście!
+            switch (outName.toUpperCase()) {
+                case "NORTH" -> displayLoc.add(0, 0, -2.0); // Przesunięcie na Północ
+                case "SOUTH" -> displayLoc.add(0, 0, 2.0);  // Przesunięcie na Południe
+                case "EAST"  -> displayLoc.add(2.0, 0, 0);  // Przesunięcie na Wschód
+                case "WEST"  -> displayLoc.add(-2.0, 0, 0); // Przesunięcie na Zachód
             }
 
-            // Zapisujemy Lore dla potrzeb onBreak (odzyskiwanie przedmiotu)
-            if (meta.hasLore()) {
-                config.set(path + ".lore", meta.getLore());
-            }
+            TextDisplay textDisplay = world.spawn(displayLoc, TextDisplay.class);
 
-            // --- LOGIKA SPECJALNA DLA TYPÓW ---
-            if ("SYNCHRONIZER".equals(type)) {
-                BlockFace left = GateUtils.rotate90(outFace).getOppositeFace();
-                BlockFace right = GateUtils.rotate90(outFace);
+            // 1. CAŁKOWITE WYŁĄCZENIE TŁA (Alpha = 0)
+            textDisplay.setBackgroundColor(Color.fromARGB(0, 0, 0, 0));
 
-                Block leftSide = block.getRelative(left);
-                Block rightSide = block.getRelative(right);
+            // 2. WYŁĄCZENIE CIENIA (Żeby nie było przesunięcia w prawo)
+            textDisplay.setShadowed(false);
 
-                leftSide.setType(block.getType());
-                rightSide.setType(block.getType());
+            // 3. WYRÓWNANIE I POZYCJA
+            textDisplay.setAlignment(TextDisplay.TextAlignment.CENTER);
+            textDisplay.setBillboard(TextDisplay.Billboard.CENTER);
 
-                String locL = GateUtils.locToStr(leftSide.getLocation());
-                String locR = GateUtils.locToStr(rightSide.getLocation());
-                String locMain = GateUtils.locToStr(block.getLocation());
+            // 4. SKALA 4.0
+            Transformation transformation = textDisplay.getTransformation();
+            transformation.getScale().set(4f, 4f, 4f);
+            textDisplay.setTransformation(transformation);
 
-                // --- TO DOPISZ, ŻEBY NAPRAWIĆ BETON ---
+            // Zapisujemy UUID do logic_gates.yml
+            config.set(path + ".displayUUID", textDisplay.getUniqueId().toString());
+        }
 
-                // 1. Zapis dla lewej strony
-                Block targetL = leftSide.getRelative(outFace); // Blok przed lewym bokiem
-                config.set("gates." + locL + ".oldBlock", targetL.getRelative(BlockFace.DOWN).getType().name());
+        // --- PARSOWANIE LORE (Ustawienia parametrów) ---
+        if (meta.hasLore() && meta.getLore() != null) {
+            for (net.kyori.adventure.text.Component componentLine : meta.lore()) {
+                String cleanLine = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(componentLine);
 
-                // 2. Zapis dla prawej strony
-                Block targetR = rightSide.getRelative(outFace); // Blok przed prawym bokiem
-                config.set("gates." + locR + ".oldBlock", targetR.getRelative(BlockFace.DOWN).getType().name());
-
-                // 3. Zapis dla środka (już masz path zdefiniowane wyżej w onPlace)
-                Block targetMain = block.getRelative(outFace);
-                config.set(path + ".oldBlock", targetMain.getRelative(BlockFace.DOWN).getType().name());
-
-                config.set("gates." + locL + ".out", outFace.name());
-                config.set("gates." + locR + ".out", outFace.name());
-                config.set("gates." + locL + ".parent", locMain);
-                config.set("gates." + locR + ".parent", locMain);
-                config.set(path + ".sideL", locL);
-                config.set(path + ".sideR", locR);
-            }
-
-            if ("DISPLAY".equals(type)) {
-                World world = block.getWorld();
-
-                // 1. Zaczynamy na środku bloku i podnosimy o 2 bloki w górę (oś Y)
-                Location displayLoc = block.getLocation().clone().add(0.5, 2.0, 0.5);
-
-                // 2. Pobieramy kierunek wyjścia bramki z configu
-                String outName = config.getString(path + ".out", "NORTH");
-
-                // 3. Sprawdzamy kierunek i przesuwamy o 2 bloki dalej przed wyjście!
-                switch (outName.toUpperCase()) {
-                    case "NORTH" -> displayLoc.add(0, 0, -2.0); // Przesunięcie na Północ
-                    case "SOUTH" -> displayLoc.add(0, 0, 2.0);  // Przesunięcie na Południe
-                    case "EAST"  -> displayLoc.add(2.0, 0, 0);  // Przesunięcie na Wschód
-                    case "WEST"  -> displayLoc.add(-2.0, 0, 0); // Przesunięcie na Zachód
+                if (cleanLine.contains("Kanał: ")) {
+                    config.set(path + ".channel", cleanLine.replace("Kanał: ", "").trim());
                 }
-
-                TextDisplay textDisplay = world.spawn(displayLoc, TextDisplay.class);
-
-                // 1. CAŁKOWITE WYŁĄCZENIE TŁA (Alpha = 0)
-                textDisplay.setBackgroundColor(Color.fromARGB(0, 0, 0, 0));
-
-                // 2. WYŁĄCZENIE CIENIA (Żeby nie było przesunięcia w prawo)
-                textDisplay.setShadowed(false);
-
-                // 3. WYRÓWNANIE I POZYCJA
-                textDisplay.setAlignment(TextDisplay.TextAlignment.CENTER);
-                textDisplay.setBillboard(TextDisplay.Billboard.CENTER);
-
-                // 4. SKALA 4.0
-                Transformation transformation = textDisplay.getTransformation();
-                transformation.getScale().set(4f, 4f, 4f);
-                textDisplay.setTransformation(transformation);
-
-                // Zapisujemy UUID do logic_gates.yml
-                config.set(path + ".displayUUID", textDisplay.getUniqueId().toString());
-            }
-
-            // --- PARSOWANIE LORE (Ustawienia parametrów) ---
-            if (meta.hasLore() && meta.getLore() != null) {
-                for (String line : meta.getLore()) {
-                    String cleanLine = ChatColor.stripColor(line);
-
-                    if (cleanLine.contains("Kanał: ")) {
-                        config.set(path + ".channel", cleanLine.replace("Kanał: ", "").trim());
-                    }
-                    else if (cleanLine.contains("min: ")) {
-                        config.set(path + ".min", Integer.parseInt(cleanLine.replace("min: ", "").trim()));
-                    }
-                    else if (cleanLine.contains("max: ")) {
-                        config.set(path + ".max", Integer.parseInt(cleanLine.replace("max: ", "").trim()));
-                    }
-                    else if (cleanLine.contains("Wartość: ")) {
-                        int val = Integer.parseInt(cleanLine.replace("Wartość: ", "").trim());
+                else if (cleanLine.contains("min: ")) {
+                    String digits = cleanLine.replaceAll("\\D+", "");
+                    if (!digits.isEmpty()) config.set(path + ".min", Long.parseLong(digits));
+                }
+                else if (cleanLine.contains("max: ")) {
+                    String digits = cleanLine.replaceAll("\\D+", "");
+                    if (!digits.isEmpty()) config.set(path + ".max", Long.parseLong(digits));
+                }
+                else if (cleanLine.contains("Wartość: ")) {
+                    // Usuwamy wszystko co nie jest cyfrą lub znakiem minus, żeby wyczyścić śmieci z Adventure
+                    String digits = cleanLine.replaceAll("[^0-9-]", "");
+                    if (!digits.isEmpty()) {
+                        long val = Long.parseLong(digits);
                         if (type.equals("NUMBER_GATE") || type.equals("DECODER")) {
                             config.set(path + ".value", val);
                         }
                     }
-                    else if (cleanLine.contains("Tekst: ")) {
-                        String textVal = cleanLine.replace("Tekst: ", "").trim();
-                        if (type.equals("STRING_GATE") || type.equals("STRING_DECODER")) {
-                            config.set(path + ".value", textVal);
-                        }
-                    }
-                    else if (cleanLine.contains("Tryb: ")) {
-                        String rawMode = cleanLine.replace("Tryb: ", "").trim();
-
-                        switch (type) {
-                            case "MATH" -> {
-                                String modeCode = switch (rawMode) {
-                                    case "Subtract" -> "SUB";
-                                    case "Multiply" -> "MUL";
-                                    case "Divide"   -> "DIV";
-                                    case "Power"    -> "POW";
-                                    default         -> "ADD";
-                                };
-                                config.set(path + ".mode", modeCode);
-                            }
-                            case "STRING_COMPARATOR" -> {
-                                config.set(path + ".mode", rawMode.toUpperCase());
-                            }
-                            default -> {
-                                // Dla zwykłego COMPARATORA i innych bramek używających znaków typu >, <, ==
-                                config.set(path + ".mode", rawMode);
-                            }
-                        }
-                    }
-                    else if (cleanLine.contains("Limit: ")) {
-                        config.set(path + ".score_limit", Integer.parseInt(cleanLine.replace("Limit: ", "").trim()));
-                        config.set(path + ".count", 0);
-                    }
-                    else if (cleanLine.contains("Czas: ")) {
-                        String timeStr = cleanLine.replace("Czas: ", "");
-                        int ticks = timeStr.endsWith("s")
-                                ? (int)(Double.parseDouble(timeStr.replace("s", "")) * 20)
-                                : Integer.parseInt(timeStr.replace("t", ""));
-                        config.set(path + ".interval", ticks);
+                }
+                else if (cleanLine.contains("Tekst: ")) {
+                    String textVal = cleanLine.replace("Tekst: ", "").trim();
+                    if (type.equals("STRING_GATE") || type.equals("STRING_DECODER")) {
+                        config.set(path + ".value", textVal);
                     }
                 }
-            } else {
-                // --- WARTOŚCI DOMYŚLNE (Gdy brak Lore) ---
-                if (type.matches("CLOCK|CLOCK_GATE|REPEATER|SENSOR")) {
-                    config.set(path + ".interval", type.equals("SENSOR") ? 5 : 20);
-                    config.set(path + ".next_tick", 0);
-                } else if ("COUNTER".equals(type)) {
-                    config.set(path + ".score_limit", 10);
-                    config.set(path + ".count", 0);
-                } else if ("RANDOM_NUMBER".equals(type)) {
-                    config.set(path + ".min", 0);
-                    config.set(path + ".max", 10);
-                } else if (type.matches("NUMBER_GATE|VARIABLE_GATE|CABLE_DATA|DECODER")) {
-                    config.set(path + ".value", 0);
+                else if (cleanLine.contains("Tryb: ")) {
+                    String rawMode = cleanLine.replace("Tryb: ", "").trim();
+
+                    switch (type) {
+                        case "MATH" -> {
+                            String modeCode = switch (rawMode) {
+                                case "Subtract" -> "SUB";
+                                case "Multiply" -> "MUL";
+                                case "Divide"   -> "DIV";
+                                case "Power"    -> "POW";
+                                default         -> "ADD";
+                            };
+                            config.set(path + ".mode", modeCode);
+                        }
+                        case "STRING_COMPARATOR" -> {
+                            config.set(path + ".mode", rawMode.toUpperCase());
+                        }
+                        default -> {
+                            // Dla zwykłego COMPARATORA i innych bramek używających znaków typu >, <, ==
+                            config.set(path + ".mode", rawMode);
+                        }
+                    }
+                }
+                else if (cleanLine.contains("Limit: ")) {
+                    String digits = cleanLine.replaceAll("\\D+", "");
+                    if (!digits.isEmpty()) {
+                        config.set(path + ".score_limit", Long.parseLong(digits));
+                        config.set(path + ".count", 0L);
+                    }
+                }
+                else if (cleanLine.contains("Czas: ")) {
+                    String timeStr = cleanLine.replace("Czas: ", "").trim();
+                    int ticks = 20; // bezpieczny domyślny backup
+
+                    if (timeStr.endsWith("s")) {
+                        String cleanNum = timeStr.replace("s", "").replaceAll("[^0-9.]", "");
+                        if (!cleanNum.isEmpty()) {
+                            ticks = (int) (Double.parseDouble(cleanNum) * 20);
+                        }
+                    } else {
+                        String cleanNum = timeStr.replace("t", "").replaceAll("\\D+", "");
+                        if (!cleanNum.isEmpty()) {
+                            ticks = Integer.parseInt(cleanNum);
+                        }
+                    }
+                    config.set(path + ".interval", ticks);
                 }
             }
-
-            plugin.saveGates();
-
-            e.getPlayer().sendMessage(plugin.getLanguageManager().getWithPrefix("gate-placed", "{TYPE}", type)
-                    .replace("{OUT}", outFace.name()));
+        } else {
+            // --- WARTOŚCI DOMYŚLNE (Gdy brak Lore) ---
+            if (type.matches("CLOCK|CLOCK_GATE|REPEATER|SENSOR")) {
+                config.set(path + ".interval", type.equals("SENSOR") ? 5 : 20);
+                config.set(path + ".next_tick", 0);
+            } else if ("COUNTER".equals(type)) {
+                config.set(path + ".score_limit", 10);
+                config.set(path + ".count", 0);
+            } else if ("RANDOM_NUMBER".equals(type)) {
+                config.set(path + ".min", 0);
+                config.set(path + ".max", 10);
+            } else if (type.matches("NUMBER_GATE|VARIABLE_GATE|CABLE_DATA|DECODER")) {
+                config.set(path + ".value", 0);
+            }
         }
+
+        plugin.saveGates();
+
+        e.getPlayer().sendMessage(plugin.getLanguageManager().getWithPrefix("gate-placed", "{TYPE}", type)
+                .replace("{OUT}", outFace.name()));
     }
 
     @EventHandler

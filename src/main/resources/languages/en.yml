@@ -5,11 +5,11 @@
 # #                                                           #
 # #############################################################
 
-# You can use color codes (e.g., &a, &c, &l) and placeholders like %time%, %player%, %min%.
+# You can use color codes (e.g., &a, &c, &l), HEX codes, gradients, and placeholders like %time%, %player%, %min%.
 messages:
   no-permission: "&cYou don't have permission!"
   reload-success: "&aConfiguration reloaded successfully!"
-  usage-gate-command: "&cUsage: §6/gate <Category> <Type> <Parameter"
+  usage-gate-command: "&cUsage: &6/gate <Category> <Type> <Parameter>"
 
   # Messages from /bramka command
   need-channel: "&cYou must specify a channel! <channel1,channel2...>"
@@ -20,7 +20,7 @@ messages:
   wrong-format: "&cWrong format! Use: min-max (e.g., 0-10)"
   provide-mode: "&cPlease specify a mode!"
   provide-sign: "&cEnter a sign! (>, <, ==, !=, >=, <=)"
-  provide-string-mode: "&cEnter a character! (==, EQUALS, EQUALS_IGNORE_CASE,=I, CONTAINS, STARTS_WITH, ENDS_WITH, EMPTY)"
+  provide-string-mode: "&cEnter a character! (EQUALS, EQUALS_IGNORE_CASE, CONTAINS, STARTS_WITH, ENDS_WITH, EMPTY)"
   invalid-sign: "&cThis is not a valid mathematical operator!"
   invalid-string-sign: "&cThis is not a valid string operator!"
   negative-number: "&cYou cannot enter a negative number!"
@@ -38,6 +38,7 @@ messages:
   seconds-range: "&cTime in seconds must be between 1s and 10s!"
 
   # Gateway Interaction Messages
+  gate-item-name-prefix: "&4Gate: &c"
   gate-removed: "&6{TYPE} &cgate has been removed!"
   power-block-break-deny: "&cThis block is powering a gate output!"
   gate-placed: "&aPlaced &e{TYPE} &agate. &6Output: &e{OUT}"
@@ -55,7 +56,7 @@ messages:
   edit-limit-info: "&7Enter: &flimit: <number> &8(Current: {CURRENT})"
   edit-range-info: "&7Enter: &frange: <number> &8(Current: {CURRENT})"
   edit-time-info: "&7Enter: &ftime: <number>s &7or &f<number>t"
-  edit-cancel-info: "&7Enter &cancel&7 to exit without changes."
+  edit-cancel-info: "&7Enter &ccancel&7 to exit without changes."
 
   # Confirm changes
   value-set: "&7New value set: &f{VAL}"
@@ -67,19 +68,20 @@ messages:
   range-set: "&7Sensor range set: &f{VAL}"
 
   # Selecting
+  selector-item-name: "&dGate Selector"
   receive-selector: "&aYou received the Gate Selector!"
   position-1-selected: "&ePoint 1 set!"
   position-2-selected: "&ePoint 2 set!"
   both-positions-required: "&cYou must select both points first!"
-  cut-out-area: "&aCut out area, §f{COUNT} &alogic gates removed"
+  cut-out-area: "&aCut out area, &f{COUNT} &alogic gates removed"
 
   # Copy, paste, rotate and undo
   copy-success: "&aSuccessfully copied &e{COUNT} &agates to clipboard!"
   clipboard-empty: "&cYour clipboard is empty! Use /alg copy first"
   paste-success: "&aSuccessfully pasted &e{COUNT} &agates!"
-  rotate-success: "&7Rotated clipboard contents by &f{DEGREE} &7 degrees"
+  rotate-success: "&7Rotated clipboard contents by &f{DEGREE} &7degrees"
   invalid-rotate-angle: "&cInvalid angle! Use 90, -90, or 180"
-  undo-success: "&aLast paste undone (&7{COUNT} goals)"
+  undo-success: "&aLast paste undone (&7{COUNT} gates&a)"
   nothing-to-undo: "&cYou have nothing to undo!"
   redo-success: "&eSuccessfully redone last undo (&7{COUNT} &egates)."
   nothing-to-redo: "&cThere is nothing to redo!"

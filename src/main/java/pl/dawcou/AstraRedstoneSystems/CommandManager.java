@@ -1,8 +1,5 @@
 package pl.dawcou.AstraRedstoneSystems;
 
-import org.bukkit.Location;
-import org.bukkit.Material;
-import org.bukkit.block.Block;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
@@ -22,32 +19,42 @@ public class CommandManager implements org.bukkit.command.CommandExecutor, org.b
 
     @Override
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
-        if (!(sender instanceof Player player)) return true;
-
         if (label.equalsIgnoreCase("astraredstonesystems") || label.equalsIgnoreCase("ars")) {
 
-            // --- RELOAD (Twoje wiadomości i logika) ---
+            // --- RELOAD ---
             if (args.length == 1 && args[0].equalsIgnoreCase("reload")) {
-                if (!player.hasPermission("astralogicgates.reload")) {
-                    player.sendMessage(plugin.getLanguageManager().getWithPrefix("no-permission"));
-                    return true;
+                // Sprawdzamy permisję tylko jeśli to gracz, żeby konsola mogła zawsze przeładować
+                if (sender instanceof Player) {
+                    Player p = (Player) sender;
+                    if (!p.hasPermission("astrars.reload")) {
+                        p.sendMessage(plugin.getLanguageManager().getWithPrefix("no-permission"));
+                        return true;
+                    }
                 }
                 plugin.reloadConfig();
                 plugin.setLanguageManager(new LanguageManager(plugin));
-                player.sendMessage(plugin.getLanguageManager().getWithPrefix("reload-success"));
+                sender.sendMessage(plugin.getLanguageManager().getWithPrefix("reload-success"));
                 return true;
             }
 
-            // --- INFO (Twoje wiadomości) ---
+            // --- INFO ---
             if (args.length == 1 && args[0].equalsIgnoreCase("info")) {
-                player.sendMessage("§7------------ " + plugin.PREFIX + " §7----------");
-                player.sendMessage("§aPlugin created by: §eDawcoU");
-                player.sendMessage("§aPlugin version: §ev" + plugin.getPluginMeta().getVersion());
-                player.sendMessage("");
-                player.sendMessage("§6Copyright © 2026 DawcoU All rights reserved");
-                player.sendMessage("§7-----------------------");
+                sender.sendMessage(plugin.getLanguageManager().parseToLegacy("<gray>------------ " + AstraRS.PREFIX + " <gray>----------"));
+                sender.sendMessage("§aPlugin created by: §eDawcoU");
+                sender.sendMessage("§aPlugin version: §ev" + plugin.getPluginMeta().getVersion());
+                sender.sendMessage("");
+                sender.sendMessage("§6Copyright © 2026 DawcoU All rights reserved");
+                sender.sendMessage("§7-----------------------");
                 return true;
             }
+
+            // --- BLOKADA DLA KONSOLI ---
+            // Wszystko powyżej działa dla konsoli i graczy, wszystko poniżej tylko dla graczy
+            if (!(sender instanceof Player)) {
+                return true;
+            }
+
+            Player player = (Player) sender;
 
             // --- SELECTOR ---
             if (args.length == 1 && args[0].equalsIgnoreCase("selector")) {

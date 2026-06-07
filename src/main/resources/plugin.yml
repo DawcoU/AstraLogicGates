@@ -24,3 +24,27 @@ permissions:
   astrars.reload:
     description: Pozwala używać komendy /ars reload
     default: op
+
+  astrars.gates.*:
+    default: op
+
+    astrars.gates.logic:
+      default: op
+
+    astrars.gates.memory:
+      default: op
+
+    astrars.gates.numbers:
+      default: op
+
+    astrars.gates.string:
+      default: op
+
+    astrars.gates.data:
+      default: op
+
+    astrars.gates.space:
+      default: op
+
+    astrars.gates.time:
+      default: op
