@@ -39,48 +39,47 @@ public class DataGates {
             Block gate = loc.getBlock();
             String type = config.getString(path + ".type", "").toUpperCase();
 
-            if (!type.matches("CABLE_DATA|DISPLAY|TRANSISTOR|VARIABLE_GATE|BATTERY")) continue;
-
             // --- INICJALIZACJA KIERUNKÓW ---
             BlockFace out;
             BlockFace back = null;
             Block target = null;
-            BlockFace s1 = null;
-            BlockFace s2 = null;
+            boolean pBack = false;
+            BlockFace right = null;
+            BlockFace left = null;
 
             // Przypisujemy kierunki tylko wtedy, gdy bramka ich wymaga
-            if (type.equals("DISPLAY") || type.equals("TRANSISTOR") || type.equals("VARIABLE_GATE") || type.equals("BATTERY")) {
+            if (type.equals("DISPLAY") || type.equals("TRANSISTOR") || type.equals("DISK_GATE") || type.equals("RAM_GATE") || type.equals("BATTERY")) {
                 String outName = config.getString(path + ".out", "NORTH");
                 out = BlockFace.valueOf(outName.toUpperCase());
                 back = out.getOppositeFace();
                 target = gate.getRelative(out);
 
                 // Wyliczamy boki na podstawie kierunku wyjścia (przodu) bramki
-                s1 = GateUtils.rotate90(out);
-                s2 = s1.getOppositeFace();
+                right = GateUtils.rotate90(out);
+                left = right.getOppositeFace();
 
                 // --- EFEKTY WIZUALNE STATUSU ---
                 boolean currentState = config.getBoolean(path + ".state", false);
 
                 // 1. EFEKT WYJŚCIA (Włączony dla Transistora, Variable i teraz dla sprawnych Baterii)
-                if (type.equals("TRANSISTOR") || type.equals("VARIABLE_GATE") || type.equals("BATTERY")) {
+                if (type.equals("TRANSISTOR") || type.equals("DISK_GATE") || type.equals("RAM_GATE") || type.equals("BATTERY")) {
                     GateUtils.spawnStatusParticle(gate, out, currentState);
                 }
 
                 // 2. EFEKT WEJŚCIA Z TYŁU (Zawsze dla wszystkich w tym bloku, w tym dla ładującej się baterii)
-                boolean pBack = GateUtils.getPowerAt(gate.getRelative(back)) > 0;
+                pBack = GateUtils.getPowerAt(gate.getRelative(back)) > 0;
                 String vBack = GateUtils.getStringFrom(gate.getRelative(back), back.getOppositeFace(), plugin);
                 boolean isActive = !vBack.isEmpty();
 
                 GateUtils.spawnStatusParticle(gate, back, isActive || pBack);
 
                 // 3. EFEKT BLOKADY Z BOKÓW (Tylko dla tych, które mają logikę blokowania)
-                if (type.equals("TRANSISTOR") || type.equals("VARIABLE_GATE")) {
-                    boolean pLeft = GateUtils.getPowerAt(gate.getRelative(s2)) > 0;
-                    boolean pRight = GateUtils.getPowerAt(gate.getRelative(s1)) > 0;
+                if (type.equals("TRANSISTOR") || type.equals("DISK_GATE") || type.equals("RAM_GATE")) {
+                    boolean pLeft = GateUtils.getPowerAt(gate.getRelative(left)) > 0;
+                    boolean pRight = GateUtils.getPowerAt(gate.getRelative(right)) > 0;
 
-                    GateUtils.spawnStatusParticle(gate, s2, pLeft);  // Lewy bok
-                    GateUtils.spawnStatusParticle(gate, s1, pRight); // Prawy bok
+                    GateUtils.spawnStatusParticle(gate, left, pLeft);  // Lewy bok
+                    GateUtils.spawnStatusParticle(gate, right, pRight); // Prawy bok
                 }
             }
 
@@ -157,20 +156,38 @@ public class DataGates {
                 }
 
                 case "DISPLAY" -> {
-                    // 1. Odbieramy uniwersalny tekst/liczbę z tyłu
+                    Location gateLoc = gate.getLocation();
+
+                    // Jeśli chunk z bramką jest odładowany, nie robimy absolutnie nic
+                    if (!gateLoc.getChunk().isLoaded()) {
+                        return;
+                    }
+
                     String rawData = GateUtils.getStringFrom(gate.getRelative(back), back.getOppositeFace(), plugin);
 
-                    // 2. Pobieramy poprzednią wartość
+                    // Pobieramy stary UUID do porównania
+                    String oldUuidStr = config.getString(path + ".displayUUID", "");
+                    String uuidStr = GateUtils.validateDisplay(config, path, gateLoc);
+
+                    config.set(path + ".displayUUID", uuidStr);
+
                     String lastOut = config.getString(path + ".current_out", "");
+                    boolean isNewHologram = !uuidStr.equals(oldUuidStr);
 
-                    if (!rawData.equals(lastOut)) {
-                        String uuidStr = config.getString(path + ".displayUUID");
+                    // Aktualizacja tekstu tylko przy zmianie danych LUB nowym hologramie (w załadowanym chunku!)
+                    if (!rawData.equals(lastOut) || isNewHologram) {
 
-                        String formatPattern = plugin.getConfig().getString("gates.data-gates.display.color", "{text}");
+                        // Jeśli z jakiegoś powodu uuidStr jest pusty (bo chunk był odładowany), pomijamy update tekstu
+                        if (uuidStr.isEmpty()) {
+                            return;
+                        }
 
-                        String finalValue = rawData.isEmpty() ? "0" : rawData;
+                        String formatPattern = plugin.getConfig().getString(
+                                "gates.data-gates.display.color", "{text}"
+                        );
+
+                        String finalValue = rawData.isEmpty() ? "" : rawData;
                         String textToParse = formatPattern.replace("{text}", finalValue);
-
                         String formattedData = plugin.getLanguageManager().parseToLegacy(textToParse);
 
                         GateUtils.updateDisplayNumber(plugin, uuidStr, formattedData);
@@ -178,7 +195,9 @@ public class DataGates {
 
                         if (debug) {
                             Bukkit.getConsoleSender().sendMessage(
-                                    AstraRS.DEBUG_PREFIX + "§fDISPLAY §7na §e" + key + " §7odświeżył tekst na: " + formattedData
+                                    AstraRS.DEBUG_PREFIX + "§fDISPLAY §7na §e" + key +
+                                            " §7" + (isNewHologram ? "odtworzył hologram i ustawił" : "odświeżył") +
+                                            " tekst na: " + formattedData
                             );
                         }
                     }
@@ -189,16 +208,15 @@ public class DataGates {
                     String incomingString = GateUtils.getStringFrom(gate.getRelative(back), back.getOppositeFace(), plugin);
 
                     // Wybieramy co faktycznie płynie z tyłu
-                    String incomingValue = incomingString.isEmpty() ? "" : incomingString;
-                    boolean incomingHasPower = !incomingValue.isEmpty();
+                    boolean incomingHasPower = !incomingString.isEmpty();
 
                     // Blokada z BOKÓW (lewy lub prawy) - używamy metody do zwykłego prądu!
-                    long blockL = GateUtils.getPowerAt(gate.getRelative(s2)); // Lewo
-                    long blockR = GateUtils.getPowerAt(gate.getRelative(s1)); // Prawo
+                    long blockL = GateUtils.getPowerAt(gate.getRelative(left)); // Lewo
+                    long blockR = GateUtils.getPowerAt(gate.getRelative(right)); // Prawo
                     boolean isBlocked = (blockL > 0 || blockR > 0);
 
                     // SYSTEMOWA POPRAWKA: Jeśli jest blokada lub brak sygnału z tyłu, wyjściem jest pustka ""
-                    String result = (isBlocked || !incomingHasPower) ? "" : incomingValue;
+                    String result = (isBlocked || !incomingHasPower) ? "" : incomingString;
                     boolean hasPower = !result.isEmpty();
 
                     String lastOut = config.getString(path + ".current_out", "");
@@ -210,7 +228,7 @@ public class DataGates {
                             String statusColor = isBlocked ? "§c[BLOKADA]" : "§a[PRZEPŁYW]";
                             Bukkit.getConsoleSender().sendMessage(
                                     AstraRS.DEBUG_PREFIX + "§6TRANSISTOR §7na §e" + key +
-                                            " " + statusColor + " §7Sygnał z tyłu: §b\"" + (incomingValue.isEmpty() ? "BRAK" : incomingValue) + "\"" +
+                                            " " + statusColor + " §7Sygnał z tyłu: §b\"" + (incomingString.isEmpty() ? "BRAK" : incomingString) + "\"" +
                                             " §7-> Wyjście: §d\"" + (result.isEmpty() ? "PUSTY" : result) + "\""
                             );
                         }
@@ -224,9 +242,9 @@ public class DataGates {
                     }
                 }
 
-                case "VARIABLE_GATE" -> {
-                    // 1. Sprawdzamy boki (S1 i S2) pod kątem sygnału Reset
-                    boolean reset = GateUtils.getPowerAt(gate.getRelative(s1)) > 0 || GateUtils.getPowerAt(gate.getRelative(s2)) > 0;
+                case "DISK_GATE" -> {
+                    // 1. Sprawdzamy boki (right i left) pod kątem sygnału Reset
+                    boolean reset = GateUtils.getPowerAt(gate.getRelative(right)) > 0 || GateUtils.getPowerAt(gate.getRelative(left)) > 0;
 
                     String currentStored = config.getString(path + ".value", "");
                     boolean previousState = config.getBoolean(path + ".state", false);
@@ -241,11 +259,12 @@ public class DataGates {
                             GateUtils.updateOutput(plugin, path, target, false);
 
                             if (debug) {
-                                Bukkit.getConsoleSender().sendMessage(AstraRS.DEBUG_PREFIX + "§dVARIABLE §e" + key + " §cZRESETOWANY sygnałem bocznym!");
+                                Bukkit.getConsoleSender().sendMessage(AstraRS.DEBUG_PREFIX + "§dDISK_GATE §e" + key + " §cZRESETOWANY sygnałem bocznym!");
                             }
 
                             // Wyczyszczone lokalnie, żeby sekcja poniżej zapisała czysty stan do pliku
                             currentStored = "";
+                            config.set(path + ".value", "");
                         }
                     } else {
                         // AKCJA: Dane z tyłu zbieramy i zapisujemy TYLKO wtedy, gdy NIE MA RESETU!
@@ -258,7 +277,60 @@ public class DataGates {
                                 config.set(path + ".value", incoming);
                                 currentStored = incoming;
                                 if (debug) {
-                                    Bukkit.getConsoleSender().sendMessage(AstraRS.DEBUG_PREFIX + "§dVARIABLE §e" + key + " §7zapisała nową wartość: §b\"" + incoming + "\"");
+                                    Bukkit.getConsoleSender().sendMessage(AstraRS.DEBUG_PREFIX + "§dDISK_GATE §e" + key + " §7zapisała nową wartość: §b\"" + incoming + "\"");
+                                }
+                            }
+                        }
+                    }
+
+                    // 4. Logika wyjścia - Zawsze sprawdzana, gwarantuje, że KAŻDA bramka zresetuje się równo!
+                    boolean hasState = !currentStored.isEmpty();
+                    previousState = config.getBoolean(path + ".state", false); // Pobieramy stan na nowo po if(reset)
+
+                    if (hasState != previousState) {
+                        config.set(path + ".state", hasState);
+                        GateUtils.updateOutput(plugin, path, target, hasState);
+                    }
+
+                    // Synchronizacja uniwersalnego wyjścia tekstowego (To czyści current_out do spodu!)
+                    if (!currentStored.equals(config.getString(path + ".current_out", ""))) {
+                        config.set(path + ".current_out", currentStored);
+                    }
+                }
+
+                case "RAM_GATE" -> {
+                    // 1. Sprawdzamy boki (right i left) pod kątem sygnału Reset i zasilania
+                    boolean reset = GateUtils.getPowerAt(gate.getRelative(left)) > 0;
+                    boolean power = GateUtils.getPowerAt(gate.getRelative(right)) > 0;
+
+                    String currentStored = config.getString(path + ".value", "");
+                    boolean previousState = config.getBoolean(path + ".state", false);
+
+                    if (reset || !power) {
+                        // Odpalamy logikę resetu TYLKO jeśli bramka faktycznie NIE JEST jeszcze pusta
+                        if (!currentStored.isEmpty() || previousState) {
+                            GateUtils.updateOutput(plugin, path, target, false);
+
+                            if (debug) {
+                                Bukkit.getConsoleSender().sendMessage(AstraRS.DEBUG_PREFIX + "§dRAM_GATE §e" + key + " §cZRESETOWANY sygnałem bocznym!");
+                            }
+
+                            // Wyczyszczone lokalnie, żeby sekcja poniżej zapisała czysty stan do pliku
+                            currentStored = "";
+                            config.set(path + ".value", "");
+                        }
+                    } else {
+                        // AKCJA: Dane z tyłu zbieramy i zapisujemy TYLKO wtedy, gdy NIE MA RESETU!
+                        // 2. Pobieramy dane z wejścia (tył) jako uniwersalny tekst/liczba
+                        String incoming = GateUtils.getStringFrom(gate.getRelative(back), back.getOppositeFace(), plugin);
+
+                        // 3. Logika "Zatrzymania" (Latch)
+                        if (!incoming.isEmpty()) {
+                            if (!incoming.equals(currentStored)) {
+                                config.set(path + ".value", incoming);
+                                currentStored = incoming;
+                                if (debug) {
+                                    Bukkit.getConsoleSender().sendMessage(AstraRS.DEBUG_PREFIX + "§dRAM_GATE §e" + key + " §7zapisała nową wartość: §b\"" + incoming + "\"");
                                 }
                             }
                         }
@@ -299,7 +371,6 @@ public class DataGates {
                     }
 
                     // --- SPRAWDZENIE CZY ŁADOWARKA JEST PODPIĘTA (TYŁ) ---
-                    boolean pBack = GateUtils.getPowerAt(gate.getRelative(back)) > 0;
                     String vBack = GateUtils.getStringFrom(gate.getRelative(back), back.getOppositeFace(), plugin);
                     boolean isInputPowered = pBack || !vBack.isEmpty();
 
@@ -342,8 +413,6 @@ public class DataGates {
                                         AstraRS.DEBUG_PREFIX + "§eBATTERY §7na §e" + key + " §aŁadowanie sieciowe... Stan: §b" + charge + "%"
                                 );
                             }
-                        } else {
-                            config.set(path + ".last_charge_tick", currentTime);
                         }
                     }
 

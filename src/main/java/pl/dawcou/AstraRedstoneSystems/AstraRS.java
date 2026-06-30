@@ -208,7 +208,7 @@ public class AstraRS extends JavaPlugin implements CommandExecutor, TabCompleter
             Material mat = switch (category) {
                 case "logic" -> switch (type) {
                     case "NOT", "NOR" -> Material.RED_CONCRETE;
-                    case "AND", "OR", "BUFFER", "PULSER" -> Material.YELLOW_CONCRETE;
+                    case "AND", "OR", "BUFFER" -> Material.YELLOW_CONCRETE;
                     case "NAND", "XNOR", "NIMPLY" -> Material.ORANGE_CONCRETE;
                     case "XOR", "IMPLY", "MUX" -> Material.LIME_CONCRETE;
                     case "SYNCHRONIZER" -> Material.BROWN_CONCRETE;
@@ -217,7 +217,7 @@ public class AstraRS extends JavaPlugin implements CommandExecutor, TabCompleter
                 case "memory" -> switch (type) {
                     case "LATCH" -> Material.CYAN_CONCRETE;
                     case "TFF" -> Material.LIGHT_BLUE_CONCRETE;
-                    case "MEMORY_CELL", "MEMORY_READ" -> Material.BLUE_CONCRETE;
+                    case "MEMORY_CELL" -> Material.BLUE_CONCRETE;
                     default -> null;
                 };
                 case "numbers" -> switch (type) {
@@ -237,7 +237,8 @@ public class AstraRS extends JavaPlugin implements CommandExecutor, TabCompleter
                     case "CABLE_DATA" -> Material.BLACK_CONCRETE;
                     case "DISPLAY" -> Material.WHITE_CONCRETE;
                     case "TRANSISTOR" -> Material.RED_CONCRETE;
-                    case "VARIABLE_GATE" -> Material.LIGHT_BLUE_CONCRETE;
+                    case "DISK_GATE" -> Material.LIGHT_BLUE_CONCRETE;
+                    case "RAM_GATE" -> Material.GREEN_CONCRETE;
                     case "BATTERY" -> Material.ORANGE_CONCRETE;
                     default -> null;
                 };
@@ -250,7 +251,7 @@ public class AstraRS extends JavaPlugin implements CommandExecutor, TabCompleter
                 case "time" -> switch (type) {
                     case "CLOCK" -> Material.GREEN_CONCRETE;
                     case "CLOCK_GATE" -> Material.LIME_CONCRETE;
-                    case "REPEATER" -> Material.YELLOW_CONCRETE;
+                    case "REPEATER", "PULSER" -> Material.YELLOW_CONCRETE;
                     default -> null;
                 };
                 default -> null;
@@ -292,7 +293,7 @@ public class AstraRS extends JavaPlugin implements CommandExecutor, TabCompleter
                     player.sendMessage(this.getLanguageManager().getWithPrefix("need-channel"));
                     return true;
                 }
-                lore.add("§7Kanał: §f" + args[2].replace(" ", ""));
+                lore.add("§7Channel: §f" + args[2].replace(" ", ""));
 
             } else if (type.equals("NUMBER_GATE") || type.equals("DECODER")) {
                 if (args.length < 3) {
@@ -305,7 +306,7 @@ public class AstraRS extends JavaPlugin implements CommandExecutor, TabCompleter
                     return true;
                 }
 
-                lore.add("§7Wartość: §f" + args[2]);
+                lore.add("§7Value: §f" + args[2]);
 
             } else if (type.equals("RANDOM_NUMBER")) {
                 if (args.length < 3) {
@@ -383,7 +384,7 @@ public class AstraRS extends JavaPlugin implements CommandExecutor, TabCompleter
                         break;
                 }
 
-                lore.add("§7Tryb: §f" + modeName);
+                lore.add("§7Mode: §f" + modeName);
 
             } else if (type.equals("COMPARATOR")) {
                 if (args.length < 3) {
@@ -398,7 +399,7 @@ public class AstraRS extends JavaPlugin implements CommandExecutor, TabCompleter
                     return true;
                 }
 
-                lore.add("§7Tryb: §f" + sign);
+                lore.add("§7Mode: §f" + sign);
 
             } else if (type.equals("COUNTER")) {
                 if (args.length < 3) {
@@ -438,11 +439,14 @@ public class AstraRS extends JavaPlugin implements CommandExecutor, TabCompleter
                     return true;
                 }
 
-                lore.add("§7Zasięg: §f" + args[2]);
+                lore.add("§7Range: §f" + args[2]);
 
             } else if (type.matches("CLOCK|CLOCK_GATE|REPEATER")) {
+                boolean isClock = type.contains("CLOCK");
+
                 if (args.length < 3) {
-                    player.sendMessage(this.getLanguageManager().getWithPrefix("provide-delay"));
+                    String msgKey = isClock ? "provide-frequency" : "provide-delay";
+                    player.sendMessage(this.getLanguageManager().getWithPrefix(msgKey));
                     return true;
                 }
 
@@ -463,18 +467,21 @@ public class AstraRS extends JavaPlugin implements CommandExecutor, TabCompleter
                 int val = Integer.parseInt(numStr);
 
                 if (input.endsWith("t")) {
-                    if (val < 5 || val > 200) {
-                        player.sendMessage(this.getLanguageManager().getWithPrefix("ticks-range-reapeter"));
+                    // Zegar i repeater mają ten sam limit od 1 ticka
+                    if (val < 1 || val > 200) {
+                        String msgKey = isClock ? "ticks-range-clock" : "ticks-range-repeater";
+                        player.sendMessage(this.getLanguageManager().getWithPrefix(msgKey));
                         return true;
                     }
                 } else if (input.endsWith("s")) {
                     if (val < 1 || val > 10) {
-                        player.sendMessage(this.getLanguageManager().getWithPrefix("seconds-range-reapeter"));
+                        String msgKey = isClock ? "seconds-range-clock" : "seconds-range-repeater";
+                        player.sendMessage(this.getLanguageManager().getWithPrefix(msgKey));
                         return true;
                     }
                 }
 
-                lore.add("§7Czas: §f" + input);
+                lore.add("§7Time: §f" + input);
 
             } else if (type.equals("STRING_GATE") || type.equals("STRING_DECODER")) {
                 if (args.length < 3) {
@@ -489,8 +496,7 @@ public class AstraRS extends JavaPlugin implements CommandExecutor, TabCompleter
                 }
                 String textValue = sb.toString().trim();
 
-                // Normalny, uniwersalny tekst dla obu bramek
-                lore.add("§7Tekst: §f" + textValue);
+                lore.add("§7Text: §f" + textValue);
 
             } else if (type.equals("STRING_COMPARATOR")) {
                 if (args.length < 3) {
@@ -500,13 +506,12 @@ public class AstraRS extends JavaPlugin implements CommandExecutor, TabCompleter
 
                 String mode = args[2].toUpperCase();
 
-                // Sprawdzamy czy gracz wpisał poprawny tryb dla tekstu
                 if (!mode.matches("==|EQUALS|EQUALS_IGNORE_CASE|=I|CONTAINS|STARTS_WITH|ENDS_WITH|EMPTY")) {
                     player.sendMessage(this.getLanguageManager().getWithPrefix("invalid-string-sign"));
                     return true;
                 }
 
-                lore.add("§7Tryb: §f" + mode);
+                lore.add("§7Mode: §f" + mode);
             }
 
             List<String> finalFormattedLore = new ArrayList<>();
@@ -538,16 +543,16 @@ public class AstraRS extends JavaPlugin implements CommandExecutor, TabCompleter
             } else if (args.length == 2) {
                 List<String> types = switch (args[0].toLowerCase()) {
                     case "logic" ->
-                            Arrays.asList("NOT", "AND", "OR", "NOR", "NAND", "XOR", "XNOR", "NIMPLY", "IMPLY", "BUFFER", "MUX", "SYNCHRONIZER", "PULSER");
-                    case "memory" -> Arrays.asList("LATCH", "TFF", "MEMORY_CELL", "MEMORY_READ");
+                            Arrays.asList("NOT", "AND", "OR", "NOR", "NAND", "XOR", "XNOR", "NIMPLY", "IMPLY", "BUFFER", "MUX", "SYNCHRONIZER");
+                    case "memory" -> Arrays.asList("LATCH", "TFF", "MEMORY_CELL");
                     case "numbers" ->
                             Arrays.asList("COUNTER", "RANDOM_BOOLEAN", "RANDOM_NUMBER", "NUMBER_GATE", "BOOLEAN_GATE", "MATH", "DECIMAL_ACCUMULATOR", "COMPARATOR", "DECODER");
                     case "string" ->
                             Arrays.asList("STRING_GATE", "STRING_COMPARATOR", "STRING_DECODER");
                     case "data" ->
-                            Arrays.asList("CABLE_DATA", "DISPLAY", "TRANSISTOR", "VARIABLE_GATE", "BATTERY");
+                            Arrays.asList("CABLE_DATA", "DISPLAY", "TRANSISTOR", "DISK_GATE", "RAM_GATE", "BATTERY");
                     case "space" -> Arrays.asList("SENDER", "RECEIVER", "SENSOR");
-                    case "time" -> Arrays.asList("CLOCK", "CLOCK_GATE", "REPEATER");
+                    case "time" -> Arrays.asList("CLOCK", "CLOCK_GATE", "REPEATER", "PULSER");
                     default -> Collections.emptyList();
                 };
                 types.forEach(t -> {

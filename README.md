@@ -32,24 +32,23 @@ All blocks have a predefined output direction (Front) based on where you look du
 
 #### ⚙️ 1. Logic Category (`/bramka logic <type>`)
 * **NOT** 🔴: Inverts the input signal from the back.
-* **NOR** 🔴: Outputs ON only if all inputs (Back and Sides) are OFF.
-* **AND** 🟡: Outputs ON only if both side inputs are ON.
+* **NOR** 🔴: Output ON only if all inputs sides are OFF.
+* **AND** 🟡: Output ON only if both side inputs are ON.
 * **OR** 🟡: Outputs ON if at least one input (Back or Sides) is ON.
 * **BUFFER** 🟡: Isolates and passes the signal from the back forward.
 * **PULSER** 🟡: Monostable circuit. Detects the rising edge from the back and triggers a clean **1-tick pulse** output, then instantly shuts down.
-* **NAND** 🟠: Inverted AND. Outputs OFF only if both sides are ON.
-* **XNOR** 🟠: Outputs ON if both side inputs are identical (both ON or both OFF).
-* **NIMPLY** 🟠: NOT IMPLY. Outputs ON only if Back is ON and Sides are OFF.
-* **XOR** 🟢: Exclusive OR. Outputs ON if side inputs are different.
-* **IMPLY** 🟢: Outputs OFF only if Back is ON and Sides are OFF.
-* **MUX** 🟢: Multiplexer. Passes signal from Left or Right side depending on the Back input state.
+* **NAND** 🟠: Inverted AND. Output OFF only if both sides are ON.
+* **XNOR** 🟠: Output ON if both side inputs are identical (both ON or both OFF).
+* **NIMPLY** 🟠: NOT IMPLY. Output ON only if Sides are OFF.
+* **XOR** 🟢: Exclusive OR. Output ON if side inputs are different.
+* **IMPLY** 🟢: Output OFF only if Back is ON and Sides are OFF.
+* **MUX** 🟢: Multiplexer. Passes the signal from the left or right side, depending on the status of the rear input. If the rear input is OFF, it takes the signal from the left side, and if ON, it takes the signal from the right side.
 * **SYNCHRONIZER** 🟤: Synchronizes signals. Outputs ON only when inputs from specified sides arrive at the exact same tick.
 
 #### 💾 2. Memory Category (`/bramka memory <type>`)
-* **LATCH** 🔵: RS-Latch memory cell. Set input on one side, Reset on the other.
+* **LATCH** 🔵: RS-Latch memory cell. Set input on one right side and Reset on the left side.
 * **TFF** 🔷: Toggle Flip-Flop. Changes its output state (Toggles ON/OFF) every time it receives a short pulse from the back.
-* **MEMORY_CELL** 🟦: Stores a single binary bit of data.
-* **MEMORY_READ** 🟦: Dedicated block to read data from surrounding memory cells.
+* **MEMORY_CELL** 🟦: It stores the binary signal at the back, takes the redstone signal at the right input, writes it to the middle of the gate and at the left input reads it and turns on the output
 
 #### 🔢 3. Numbers Category (`/bramka numbers <type>`)
 * **MATH** 🟦: Core calculator block. Takes numbers from Left and Right inputs, performs actions (`ADD`, `SUB`, `MUL`, `DIV`, `POW`), and sends the result forward.
@@ -71,7 +70,8 @@ All blocks have a predefined output direction (Front) based on where you look du
 * **CABLE_DATA** ⚫: The universal data highway. Transfers text and numbers between data blocks without mixing them up with normal Redstone. Includes anti-echo protection!
 * **DISPLAY** ⬜: Text hologram display. Renders any incoming string/number from the back dynamically in the air.
 * **TRANSISTOR** 🔴: Data valve. Passes data from the back to the front unless it is blocked by a side Redstone signal.
-* **VARIABLE_GATE** 🔷: Data Latch. Permanently stores and outputs the last text/number received from the back. Clears instantly into an empty string when triggered by a side Reset signal.
+* **DISK_GATE (Formerly VARIABLE_GATE)** 🔷: The fixed String/Number memory cell on the back takes and stores incoming text or number and the sides are used to reset the cell.
+* **RAM_GATE** 🟢: Volatile memory cell works the same as DISK_GATE but requires a constant redstone signal from the right side to store and hold the current value and the left side resets it
 * **BATTERY** 🟠: Energy storage cell. Charges when powered from the back and slowly decays over time. Outputs its current status as a percentage (e.g., `85%`).
 
 #### 📡 6. Space (Wireless) Category (`/bramka space <type>`)

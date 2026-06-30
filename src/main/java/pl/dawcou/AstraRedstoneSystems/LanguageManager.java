@@ -101,11 +101,11 @@ public class LanguageManager {
 
     // Pobiera czystą wiadomość z mapy i od razu ją konwertuje (Z PREFIXEM LUB BEZ - zależy co masz w configu)
     public String getMessage(String path) {
-        String rawMessage = messages.getOrDefault(path, "§cMissing string: " + path);
+        String rawMessage = messages.getOrDefault(path, "§cNo message: " + path);
         return parseToLegacy(rawMessage);
     }
 
-    // Pobiera wiadomość z prefixem SZTYWNO na początku (zostawiamy, jeśli gdzieś używasz)
+    // Pobiera wiadomość z prefixem SZTYWNO na początku (zostawiamy)
     public String getWithPrefix(String path) {
         return parseToLegacy(AstraRS.PREFIX) + " " + getMessage(path);
     }
@@ -113,7 +113,7 @@ public class LanguageManager {
     // Metoda z placeholderem (teraz bezpiecznie przetwarza podmieniony tekst)
     public String getWithPrefix(String path, String placeholder, String value) {
         // 1. Pobieramy SUROWY tekst z mapy, żeby placeholder się podmienił zanim wejdą sekcje '§'
-        String rawMessage = messages.getOrDefault(path, "§cMissing string: " + path);
+        String rawMessage = messages.getOrDefault(path, "§cNo message: " + path);
         String msg = rawMessage.replace(placeholder, value);
 
         // 2. Dopiero teraz formatujemy całość

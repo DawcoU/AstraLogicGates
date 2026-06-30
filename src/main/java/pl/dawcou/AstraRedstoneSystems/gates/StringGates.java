@@ -37,18 +37,18 @@ public class StringGates {
             Block gate = loc.getBlock();
             String type = config.getString(path + ".type", "").toUpperCase();
 
-            // longeresują nas TYLKO czyste bramki tekstowe
-            if (!type.matches("STRING_GATE|STRING_COMPARATOR|STRING_DECODER")) continue;
-
             // --- INICJALIZACJA KIERUNKÓW ---
             String outName = config.getString(path + ".out", "NORTH");
             BlockFace out = BlockFace.valueOf(outName.toUpperCase());
             BlockFace back = out.getOppositeFace();
-            BlockFace s1 = GateUtils.rotate90(out);
-            BlockFace s2 = s1.getOppositeFace();
+            BlockFace right = GateUtils.rotate90(out);
+            BlockFace left = right.getOppositeFace();
             Block target = gate.getRelative(out);
 
             boolean currentState = config.getBoolean(path + ".state", false);
+            String sL = "";
+            String sR = "";
+            String sBack = "";
 
             // --- EFEKTY WIZUALNE STATUSU (ZABEZPIECZONE WARUNKAMI) ---
 
@@ -60,16 +60,16 @@ public class StringGates {
             // 2. Cząsteczki WEJŚCIA Z TYŁU
             boolean pBack = GateUtils.getPowerAt(gate.getRelative(back)) > 0;
             if (type.matches("STRING_GATE|STRING_DECODER")) {
-                String sBack = GateUtils.getStringFrom(gate.getRelative(back), back.getOppositeFace(), plugin);
+                sBack = GateUtils.getStringFrom(gate.getRelative(back), back.getOppositeFace(), plugin);
                 GateUtils.spawnStatusParticle(gate, back, pBack || !sBack.isEmpty());
             }
 
             // 3. Cząsteczki BOCZNE - ściśle tylko i wyłącznie dla COMPARATORA
             if (type.equals("STRING_COMPARATOR")) {
-                String sL = GateUtils.getStringFrom(gate.getRelative(s2), s2.getOppositeFace(), plugin); // Lewo
-                String sR = GateUtils.getStringFrom(gate.getRelative(s1), s1.getOppositeFace(), plugin); // Prawo
-                GateUtils.spawnStatusParticle(gate, s2, !sL.isEmpty());
-                GateUtils.spawnStatusParticle(gate, s1, !sR.isEmpty());
+                sL = GateUtils.getStringFrom(gate.getRelative(left), left.getOppositeFace(), plugin);
+                sR = GateUtils.getStringFrom(gate.getRelative(right), right.getOppositeFace(), plugin);
+                GateUtils.spawnStatusParticle(gate, left, !sL.isEmpty());
+                GateUtils.spawnStatusParticle(gate, right, !sR.isEmpty());
             }
 
             // --- LOGIKA BRAMEK ---
@@ -93,8 +93,6 @@ public class StringGates {
 
                 case "STRING_COMPARATOR" -> {
                     // 1. Pobieranie danych z lewej (główny tekst) i prawej (tekst do porównania/próg)
-                    String sL = GateUtils.getStringFrom(gate.getRelative(s2), s2.getOppositeFace(), plugin);
-                    String sR = GateUtils.getStringFrom(gate.getRelative(s1), s1.getOppositeFace(), plugin);
                     String mode = config.getString(path + ".mode", "EQUALS").toUpperCase();
 
                     // OCHRONA: Jeśli główny lewy string jest pusty, natychmiast gasimy bramkę
@@ -140,17 +138,16 @@ public class StringGates {
                 }
 
                 case "STRING_DECODER" -> {
-                    String incoming = GateUtils.getStringFrom(gate.getRelative(back), back.getOppositeFace(), plugin);
                     String targetValue = config.getString(path + ".value", "");
 
-                    boolean isMatch = !incoming.isEmpty() && incoming.equals(targetValue);
+                    boolean isMatch = !sBack.isEmpty() && sBack.equals(targetValue);
                     String finalVal = isMatch ? "1" : "";
 
                     String lastOut = config.getString(path + ".current_out", "");
 
                     if (!finalVal.equals(lastOut)) {
                         if (debug) {
-                            plugin.getLogger().info("[AstraDebug] STRING_DECODER " + key + " -> '" + incoming + "'");
+                            plugin.getLogger().info("[AstraDebug] STRING_DECODER " + key + " -> '" + sBack + "'");
                         }
                         config.set(path + ".current_out", finalVal);
                         config.set(path + ".state", isMatch);

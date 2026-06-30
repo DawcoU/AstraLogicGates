@@ -4,10 +4,15 @@ import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
+import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
+import org.bukkit.block.Sign;
+import org.bukkit.block.data.BlockData;
+import org.bukkit.block.sign.Side;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.MemoryConfiguration;
 import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
@@ -19,40 +24,145 @@ import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 
+import java.io.File;
+import java.io.IOException;
 import java.util.*;
 
 public class SelectionManager implements Listener {
 
     private final AstraRS plugin;
     private final Map<UUID, Location[]> selections = new HashMap<>();
-    private final Map<UUID, List<Location>> pasteHistory = new HashMap<>();
-    private final Map<UUID, Map<Location, ConfigurationSection>> redoHistory = new HashMap<>();
     private final Map<UUID, Map<org.bukkit.util.Vector, ConfigurationSection>> clipboard = new HashMap<>();
+
+    // Klasa pomocnicza do trzymania stanu bloku przed zmianami (wielopoziomowa historia)
+    private static class BlockStateBackup {
+        private final Location location;
+        private final BlockData blockData;
+        private final String[] frontSignLines;
+        private final String[] backSignLines;
+        private final ConfigurationSection gateConfigSnapshot;
+
+        public BlockStateBackup(Location location, BlockData blockData, String[] frontSignLines, String[] backSignLines, ConfigurationSection gateConfigSnapshot) {
+            this.location = location;
+            this.blockData = blockData.clone();
+            this.frontSignLines = frontSignLines;
+            this.backSignLines = backSignLines;
+            this.gateConfigSnapshot = gateConfigSnapshot;
+        }
+    }
+
+    private final Map<UUID, LinkedList<List<BlockStateBackup>>> pasteHistory = new HashMap<>();
+    private final Map<UUID, LinkedList<List<BlockStateBackup>>> redoHistory = new HashMap<>();
+    private static final int MAX_HISTORY_SIZE = 10;
 
     public SelectionManager(AstraRS plugin) {
         this.plugin = plugin;
     }
 
-    // Metoda do dawania świecącego patyka
+    private void serializeBlockState(Block block, ConfigurationSection targetSection) {
+        targetSection.set("block_data_str", block.getBlockData().getAsString());
+
+        if (block.getState() instanceof Sign sign) {
+            List<String> frontLines = new ArrayList<>();
+            List<String> backLines = new ArrayList<>();
+            for (int i = 0; i < 4; i++) {
+                frontLines.add(sign.getSide(Side.FRONT).getLine(i));
+                backLines.add(sign.getSide(Side.BACK).getLine(i));
+            }
+            targetSection.set("sign_front", frontLines);
+            targetSection.set("sign_back", backLines);
+        }
+    }
+
+    private void deserializeBlockState(Location loc, ConfigurationSection sourceSection) {
+        String dataStr = sourceSection.getString("block_data_str");
+        if (dataStr == null) {
+            String legacyMat = sourceSection.getString("block_type", "AIR");
+            loc.getBlock().setType(Material.matchMaterial(legacyMat) != null ? Material.matchMaterial(legacyMat) : Material.AIR, false);
+            return;
+        }
+
+        try {
+            BlockData data = Bukkit.createBlockData(dataStr);
+            loc.getBlock().setBlockData(data, false);
+
+            if (loc.getBlock().getState() instanceof Sign sign) {
+                List<String> frontLines = sourceSection.getStringList("sign_front");
+                List<String> backLines = sourceSection.getStringList("sign_back");
+                for (int i = 0; i < 4; i++) {
+                    if (i < frontLines.size()) sign.getSide(Side.FRONT).setLine(i, frontLines.get(i));
+                    if (i < backLines.size()) sign.getSide(Side.BACK).setLine(i, backLines.get(i));
+                }
+                sign.update(true, false);
+            }
+        } catch (IllegalArgumentException e) {
+            loc.getBlock().setType(Material.AIR, false);
+        }
+    }
+
+    private BlockStateBackup createBackup(Location loc) {
+        Block block = loc.getBlock();
+        BlockData data = block.getBlockData();
+        String[] front = null;
+        String[] back = null;
+
+        if (block.getState() instanceof Sign sign) {
+            front = new String[4];
+            back = new String[4];
+            for (int i = 0; i < 4; i++) {
+                front[i] = sign.getSide(Side.FRONT).getLine(i);
+                back[i] = sign.getSide(Side.BACK).getLine(i);
+            }
+        }
+
+        String locStr = "gates." + GateUtils.locToStr(loc);
+        ConfigurationSection originalGate = plugin.getGatesConfig().getConfigurationSection(locStr);
+        ConfigurationSection snapshot = null;
+        if (originalGate != null) {
+            snapshot = new MemoryConfiguration();
+            for (String key : originalGate.getKeys(true)) {
+                snapshot.set(key, originalGate.get(key));
+            }
+        }
+
+        return new BlockStateBackup(loc, data, front, back, snapshot);
+    }
+
+    private void restoreBackup(BlockStateBackup backup) {
+        Location loc = backup.location;
+        loc.getBlock().setBlockData(backup.blockData, false);
+
+        if (loc.getBlock().getState() instanceof Sign sign && backup.frontSignLines != null) {
+            for (int i = 0; i < 4; i++) {
+                sign.getSide(Side.FRONT).setLine(i, backup.frontSignLines[i]);
+                sign.getSide(Side.BACK).setLine(i, backup.backSignLines[i]);
+            }
+            sign.update(true, false);
+        }
+
+        String locKey = "gates." + GateUtils.locToStr(loc);
+        if (backup.gateConfigSnapshot != null) {
+            plugin.getGatesConfig().set(locKey, backup.gateConfigSnapshot);
+        } else {
+            plugin.getGatesConfig().set(locKey, null);
+        }
+    }
+
     public void giveSelector(Player player) {
         ItemStack stick = new ItemStack(Material.STICK);
         ItemMeta meta = stick.getItemMeta();
 
         if (meta != null) {
-            // Pobieramy nazwę selektora bezpośrednio z klasy językowej
             String langName = plugin.getLanguageManager().getMessage("selector-item-name");
             if (langName == null || langName.isEmpty()) {
-                langName = "&dSelektor Bramek"; // Backup, gdyby klucza zabrakło
+                langName = "&dSelektor Bramek";
             }
 
             meta.displayName(net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer.legacyAmpersand().deserialize(langName));
 
-            // ZASZYWANIE DANYCH W PRZEDMIOCIE (PDC)
-            // Tworzymy unikalny klucz logiczny
             org.bukkit.NamespacedKey key = new org.bukkit.NamespacedKey(plugin, "item_type");
             meta.getPersistentDataContainer().set(key, org.bukkit.persistence.PersistentDataType.STRING, "gate_selector");
 
-            // Efekt świecenia
             meta.addEnchant(Enchantment.LUCK, 1, true);
             meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
 
@@ -68,30 +178,24 @@ public class SelectionManager implements Listener {
         Player player = event.getPlayer();
         ItemStack item = event.getItem();
 
-        // Szybki powrót, jeśli gracz klika powietrze pusta ręką
         if (item == null || !item.hasItemMeta()) return;
 
         ItemMeta currentMeta = item.getItemMeta();
         if (currentMeta == null) return;
 
-        // 1. SPRAWDZAMY UKRYTE DANE PDC ZAMIAST TEXTU NAZWY
         org.bukkit.NamespacedKey key = new org.bukkit.NamespacedKey(plugin, "item_type");
         if (!currentMeta.getPersistentDataContainer().has(key, org.bukkit.persistence.PersistentDataType.STRING)) return;
 
         String itemType = currentMeta.getPersistentDataContainer().get(key, org.bukkit.persistence.PersistentDataType.STRING);
         if (!"gate_selector".equals(itemType)) return;
 
-        // 2. POTĘŻNA BLOKADA BEZPIECZEŃSTWA (PERMISJA)
-        // Sprawdzamy ją OD RAZU po wykryciu, że to na pewno jest nasz selektor
         if (!player.hasPermission("astrars.admin")) {
             player.sendMessage(plugin.getLanguageManager().getWithPrefix("no-permission"));
             return;
         }
 
-        // Jeśli nie kliknął bloku (np. kliknął powietrze), przerywamy dalszą logikę pozycji
         if (event.getClickedBlock() == null) return;
 
-        // Blokujemy domyślne akcje Minecrafta dla patyka (np. uderzanie bloków)
         event.setCancelled(true);
 
         UUID uuid = player.getUniqueId();
@@ -101,13 +205,11 @@ public class SelectionManager implements Listener {
         Location[] playerSelections = selections.get(uuid);
 
         if (event.getAction() == Action.LEFT_CLICK_BLOCK) {
-            // Sprawdzamy, czy pozycja 1 jest inna niż kliknięta
             if (playerSelections[0] == null || !playerSelections[0].equals(clickedLoc)) {
                 playerSelections[0] = clickedLoc;
                 player.sendMessage(plugin.getLanguageManager().getWithPrefix("position-1-selected"));
             }
         } else if (event.getAction() == Action.RIGHT_CLICK_BLOCK) {
-            // Sprawdzamy, czy pozycja 2 jest inna niż kliknięta
             if (playerSelections[1] == null || !playerSelections[1].equals(clickedLoc)) {
                 playerSelections[1] = clickedLoc;
                 player.sendMessage(plugin.getLanguageManager().getWithPrefix("position-2-selected"));
@@ -133,38 +235,19 @@ public class SelectionManager implements Listener {
         int minZ = Math.min(loc1.getBlockZ(), loc2.getBlockZ());
         int maxZ = Math.max(loc1.getBlockZ(), loc2.getBlockZ());
 
-        // 1. USUWANIE WSZYSTKICH BLOKÓW W OBSZARZE
-        for (int x = minX; x <= maxX; x++) {
-            for (int y = minY; y <= maxY; y++) {
-                for (int z = minZ; z <= maxZ; z++) {
-                    world.getBlockAt(x, y, z).setType(Material.AIR);
-                }
-            }
-        }
-
-        // 2. USUWANIE LOGIKI BRAMEK Z CONFIGU
         FileConfiguration config = plugin.getGatesConfig();
         ConfigurationSection gates = config.getConfigurationSection("gates");
         int removedGates = 0;
 
-        if (gates != null) {
-            for (String key : gates.getKeys(false)) {
-                try {
-                    Location gateLoc = GateUtils.strToLoc(key);
-                    if (gateLoc == null) continue;
+        for (int x = minX; x <= maxX; x++) {
+            for (int y = minY; y <= maxY; y++) {
+                for (int z = minZ; z <= maxZ; z++) {
+                    Location target = new Location(world, x, y, z);
+                    String key = GateUtils.locToStr(target);
 
-                    // SPRAWDZENIE ŚWIATA! (Bardzo ważne, żeby nie usuwać bramek z innych światów o tych samych kordach)
-                    if (!gateLoc.getWorld().equals(world)) continue;
-
-                    int gx = gateLoc.getBlockX();
-                    int gy = gateLoc.getBlockY();
-                    int gz = gateLoc.getBlockZ();
-
-                    if (gx >= minX && gx <= maxX && gy >= minY && gy <= maxY && gz >= minZ && gz <= maxZ) {
+                    if (gates != null && gates.contains(key)) {
                         ConfigurationSection data = gates.getConfigurationSection(key);
                         if (data != null) {
-
-                            // --- DODATKOWE SPRZĄTANIE (np. dla DISPLAY) ---
                             String type = data.getString("type", "");
                             if ("DISPLAY".equals(type)) {
                                 String uuidStr = data.getString("displayUUID");
@@ -175,29 +258,24 @@ public class SelectionManager implements Listener {
                                     } catch (Exception ignored) {}
                                 }
                             }
-
-                            // Logika dla Synchronizera
                             if (data.contains("sideL")) {
                                 config.set("gates." + data.getString("sideL"), null);
                                 config.set("gates." + data.getString("sideR"), null);
                             }
                         }
-
                         config.set("gates." + key, null);
                         removedGates++;
                     }
-                } catch (Exception ex) {
-                    // Ciche pomijanie błędnych wpisów
+                    world.getBlockAt(x, y, z).setType(Material.AIR);
                 }
             }
-            plugin.saveGates();
         }
+        plugin.saveGates();
 
         String msg = plugin.getLanguageManager().getWithPrefix("cut-out-area");
         player.sendMessage(msg.replace("{COUNT}", String.valueOf(removedGates)));
     }
 
-    // COPY
     public void copySelection(Player player) {
         UUID uuid = player.getUniqueId();
         if (selections.get(uuid) == null || selections.get(uuid)[0] == null || selections.get(uuid)[1] == null) {
@@ -208,6 +286,7 @@ public class SelectionManager implements Listener {
         Location loc1 = selections.get(uuid)[0];
         Location loc2 = selections.get(uuid)[1];
         Location playerLoc = player.getLocation().getBlock().getLocation();
+        World world = loc1.getWorld();
 
         int minX = Math.min(loc1.getBlockX(), loc2.getBlockX());
         int maxX = Math.max(loc1.getBlockX(), loc2.getBlockX());
@@ -219,98 +298,115 @@ public class SelectionManager implements Listener {
         ConfigurationSection gates = plugin.getGatesConfig().getConfigurationSection("gates");
         Map<org.bukkit.util.Vector, ConfigurationSection> playerClipboard = new HashMap<>();
 
-        if (gates != null) {
-            for (String key : gates.getKeys(false)) {
-                Location gateLoc = GateUtils.strToLoc(key);
-                if (gateLoc == null) continue; // Ignorujemy śmieci, które nie są lokacją
+        for (int x = minX; x <= maxX; x++) {
+            for (int y = minY; y <= maxY; y++) {
+                for (int z = minZ; z <= maxZ; z++) {
+                    Location currentLoc = new Location(world, x, y, z);
+                    Block block = currentLoc.getBlock();
+                    String locStr = GateUtils.locToStr(currentLoc);
+                    Material actualMaterial = block.getType();
 
-                int gx = gateLoc.getBlockX();
-                int gy = gateLoc.getBlockY();
-                int gz = gateLoc.getBlockZ();
+                    boolean isGate = (gates != null && gates.contains(locStr));
 
-                // 2. Sprawdzamy, czy blok jest w zaznaczeniu
-                if (gx >= minX && gx <= maxX && gy >= minY && gy <= maxY && gz >= minZ && gz <= maxZ) {
-                    ConfigurationSection originalGate = gates.getConfigurationSection(key);
-                    if (originalGate == null) continue;
-
-                    // --- GŁĘBOKA KOPIA ---
-                    ConfigurationSection copyOfData = new MemoryConfiguration();
-                    for (String gateKey : originalGate.getKeys(true)) {
-                        copyOfData.set(gateKey, originalGate.get(gateKey));
+                    if (actualMaterial == Material.AIR && !isGate) {
+                        continue;
                     }
 
-                    // RESETOWANIE DANYCH TYMCZASOWYCH (Bardzo ważne!)
-                    copyOfData.set("state", false);
-                    copyOfData.set("current_out", 0); // Czyścimy sygnał z kabli przy kopiowaniu!
-                    copyOfData.set("power", 0);       // Resetujemy moc magistrali danych
-                    copyOfData.set("oldBlock", null);
+                    ConfigurationSection copyOfData = new MemoryConfiguration();
+                    serializeBlockState(block, copyOfData);
 
-                    // Pobieramy materiał bloku
-                    Material actualMaterial = gateLoc.getBlock().getType();
-                    copyOfData.set("block_type", actualMaterial.name());
+                    if (isGate) {
+                        ConfigurationSection originalGate = gates.getConfigurationSection(locStr);
+                        if (originalGate != null) {
+                            for (String gateKey : originalGate.getKeys(true)) {
+                                copyOfData.set(gateKey, originalGate.get(gateKey));
+                            }
+                            copyOfData.set("state", false);
+                            copyOfData.set("current_out", 0);
+                            copyOfData.set("power", 0);
+                            copyOfData.set("last_decay", 0);
+                            copyOfData.set("last_charge_tick", 0);
 
-                    // 3. Obliczamy offset względem gracza
-                    org.bukkit.util.Vector offset = new org.bukkit.util.Vector(gx, gy, gz).subtract(playerLoc.toVector());
+                            String gateType = copyOfData.getString("type");
+                            if (gateType != null && gateType.equalsIgnoreCase("BATTERY")) {
+                                copyOfData.set("last_decay", 0);
+                                copyOfData.set("last_charge_tick", 0);
+                            }
+                        }
+                    }
+
+                    copyOfData.set("is_gate_logic", isGate);
+                    org.bukkit.util.Vector offset = new org.bukkit.util.Vector(x, y, z).subtract(playerLoc.toVector());
                     playerClipboard.put(offset, copyOfData);
                 }
             }
         }
 
-        // Zapisujemy pod UUID gracza
         clipboard.put(uuid, playerClipboard);
 
+        long actualGatesCount = playerClipboard.values().stream()
+                .filter(section -> section.getBoolean("is_gate_logic", false))
+                .count();
+
         String msg = plugin.getLanguageManager().getWithPrefix("copy-success");
-        player.sendMessage(msg.replace("{COUNT}", String.valueOf(playerClipboard.size())));
+        player.sendMessage(msg.replace("{COUNT}", String.valueOf(actualGatesCount)));
     }
 
-    // PASTE
     public void pasteSelection(Player player) {
         UUID uuid = player.getUniqueId();
-        List<Location> lastPaste = new ArrayList<>();
-
         if (!clipboard.containsKey(uuid) || clipboard.get(uuid).isEmpty()) {
             player.sendMessage(plugin.getLanguageManager().getWithPrefix("clipboard-empty"));
             return;
         }
 
-        // Pobieramy lokalizację bloku, na którym stoi gracz
         Location playerLoc = player.getLocation().getBlock().getLocation();
         FileConfiguration config = plugin.getGatesConfig();
+        List<BlockStateBackup> currentOperationBackup = new ArrayList<>();
 
-        int pastedCount = 0;
-        for (Map.Entry<org.bukkit.util.Vector, ConfigurationSection> entry : clipboard.get(uuid).entrySet()) {
-            // Obliczamy nową lokalizację na podstawie offsetu ze schowka
+        int pastedGatesCount = 0;
+
+        List<Map.Entry<org.bukkit.util.Vector, ConfigurationSection>> entries = new ArrayList<>(clipboard.get(uuid).entrySet());
+        entries.sort(Comparator.comparingInt(e -> {
+            String dataStr = e.getValue().getString("block_data_str", "");
+            if (dataStr.contains("sign") || dataStr.contains("button") || dataStr.contains("lever")) return 1;
+            return 0;
+        }));
+
+        for (Map.Entry<org.bukkit.util.Vector, ConfigurationSection> entry : entries) {
             Location newLoc = playerLoc.clone().add(entry.getKey());
             ConfigurationSection gateData = entry.getValue();
 
-            // 1. Pobranie materiału i stawianie bloku
-            // Wywalamy nieistniejące zmienne "offset" i "gateMaterial"
-            String materialName = gateData.getString("block_type", "RED_CONCRETE");
-            Material mat;
-            try {
-                mat = Material.valueOf(materialName);
-            } catch (IllegalArgumentException e) {
-                mat = Material.RED_CONCRETE; // Backup, gdyby nazwa materiału była błędna
+            currentOperationBackup.add(createBackup(newLoc));
+
+            boolean isGate = gateData.getBoolean("is_gate_logic", false);
+            deserializeBlockState(newLoc, gateData);
+
+            String locKey = "gates." + GateUtils.locToStr(newLoc);
+            if (isGate) {
+                ConfigurationSection saveData = new MemoryConfiguration();
+                for (String key : gateData.getKeys(true)) {
+                    if (key.equals("block_data_str") || key.equals("sign_front") || key.equals("sign_back") || key.equals("is_gate_logic")) {
+                        continue;
+                    }
+                    saveData.set(key, gateData.get(key));
+                }
+                config.set(locKey, saveData);
+                pastedGatesCount++;
+            } else {
+                config.set(locKey, null);
             }
-
-            newLoc.getBlock().setType(mat);
-
-            lastPaste.add(newLoc);
-
-            // 2. Zapis logiki pod NOWYM adresem
-            gateData.set("block_type", null);
-
-            config.set("gates." + GateUtils.locToStr(newLoc), gateData);
-
-            pastedCount++;
         }
 
-        pasteHistory.put(uuid, lastPaste);
+        pasteHistory.computeIfAbsent(uuid, k -> new LinkedList<>()).addFirst(currentOperationBackup);
+        if (pasteHistory.get(uuid).size() > MAX_HISTORY_SIZE) {
+            pasteHistory.get(uuid).removeLast();
+        }
+        redoHistory.remove(uuid);
 
         plugin.saveGates();
 
         String msg = plugin.getLanguageManager().getWithPrefix("paste-success");
-        player.sendMessage(msg.replace("{COUNT}", String.valueOf(pastedCount)));
+        player.sendMessage(msg.replace("{COUNT}", String.valueOf(pastedGatesCount)));
     }
 
     public void undoPaste(Player player) {
@@ -320,50 +416,24 @@ public class SelectionManager implements Listener {
             return;
         }
 
-        List<Location> locations = pasteHistory.get(uuid);
-        Map<Location, ConfigurationSection> redoData = new HashMap<>();
-        FileConfiguration config = plugin.getGatesConfig();
+        List<BlockStateBackup> lastOperation = pasteHistory.get(uuid).removeFirst();
+        List<BlockStateBackup> redoBackup = new ArrayList<>();
 
-        for (Location loc : locations) {
-            String locKey = "gates." + GateUtils.locToStr(loc);
-            ConfigurationSection data = config.getConfigurationSection(locKey);
-
-            if (data != null) {
-                // Robimy kopię danych
-                ConfigurationSection copyOfData = new MemoryConfiguration();
-                for (String key : data.getKeys(true)) {
-                    copyOfData.set(key, data.get(key));
-                }
-
-                copyOfData.set("cached_block_type", loc.getBlock().getType().name());
-
-                // Zapisujemy: Dokładna Lokacja -> Dane
-                redoData.put(loc, copyOfData);
-
-                // Czyścimy świat i config
-                loc.getBlock().setType(Material.AIR);
-
-                // LOGIKA SPECJALNA: Jeśli to RODZIC (środek Synchronizera), musimy wyczyścić boki
-                // To na wypadek, gdyby boki nie znalazły się na liście 'locations'
-                if (data.contains("sideL")) {
-                    config.set("gates." + data.getString("sideL"), null);
-                }
-                if (data.contains("sideR")) {
-                    config.set("gates." + data.getString("sideR"), null);
-                }
-
-                config.set(locKey, null);
-            }
+        for (BlockStateBackup blockBackup : lastOperation) {
+            redoBackup.add(createBackup(blockBackup.location));
         }
 
-        redoHistory.put(uuid, redoData);
-        pasteHistory.remove(uuid);
+        for (int i = lastOperation.size() - 1; i >= 0; i--) {
+            restoreBackup(lastOperation.get(i));
+        }
+
+        redoHistory.computeIfAbsent(uuid, k -> new LinkedList<>()).addFirst(redoBackup);
+        if (redoHistory.get(uuid).size() > MAX_HISTORY_SIZE) {
+            redoHistory.get(uuid).removeLast();
+        }
 
         plugin.saveGates();
-
-        int count = locations.size();
-
-        player.sendMessage(plugin.getLanguageManager().getWithPrefix("undo-success", "{COUNT}", String.valueOf(count)));
+        player.sendMessage(plugin.getLanguageManager().getWithPrefix("undo-success", "{COUNT}", String.valueOf(lastOperation.size())));
     }
 
     public void redoPaste(Player player) {
@@ -373,34 +443,21 @@ public class SelectionManager implements Listener {
             return;
         }
 
-        Map<Location, ConfigurationSection> redoData = redoHistory.get(uuid);
-        FileConfiguration config = plugin.getGatesConfig();
-        List<Location> restoredLocations = new ArrayList<>();
+        List<BlockStateBackup> redoOperation = redoHistory.get(uuid).removeFirst();
+        List<BlockStateBackup> undoBackup = new ArrayList<>();
 
-        for (Map.Entry<Location, ConfigurationSection> entry : redoData.entrySet()) {
-            Location loc = entry.getKey();
-            ConfigurationSection data = entry.getValue();
-
-            // 1. Odczytujemy typ z bufora pamięci
-            String matName = data.getString("cached_block_type", "WHITE_CONCRETE");
-            loc.getBlock().setType(Material.matchMaterial(matName));
-
-            // 2. Usuwamy ten klucz z obiektu, żeby nie wleciał do gates.yml przy zapisie
-            data.set("cached_block_type", null);
-
-            // 2. Wrzucamy z powrotem do configu pod stare kordy
-            config.set("gates." + GateUtils.locToStr(loc), data);
-
-            restoredLocations.add(loc);
+        for (BlockStateBackup blockBackup : redoOperation) {
+            undoBackup.add(createBackup(blockBackup.location));
         }
 
-        // Zapisujemy nową historię do UNDO (żeby po redo można było znowu zrobić undo)
-        pasteHistory.put(uuid, restoredLocations);
-        redoHistory.remove(uuid);
+        for (BlockStateBackup blockBackup : redoOperation) {
+            restoreBackup(blockBackup);
+        }
+
+        pasteHistory.computeIfAbsent(uuid, k -> new LinkedList<>()).addFirst(undoBackup);
 
         plugin.saveGates();
-        // Na końcu metody redoPaste:
-        player.sendMessage(plugin.getLanguageManager().getWithPrefix("redo-success", "{COUNT}", String.valueOf(restoredLocations.size())));
+        player.sendMessage(plugin.getLanguageManager().getWithPrefix("redo-success", "{COUNT}", String.valueOf(redoOperation.size())));
     }
 
     public void rotateSelection(Player player, int degrees) {
@@ -410,7 +467,6 @@ public class SelectionManager implements Listener {
             return;
         }
 
-        // Normalizacja stopni (np. -90 to 270)
         int angle = (degrees % 360 + 360) % 360;
         if (angle == 0) return;
 
@@ -421,24 +477,26 @@ public class SelectionManager implements Listener {
             org.bukkit.util.Vector vec = entry.getKey();
             ConfigurationSection data = entry.getValue();
 
-            // 1. OBRACANIE WEKTORA (Offsetu)
             double x = vec.getX();
             double z = vec.getZ();
-            double newX = x;
-            double newZ = z;
-
             double radians = Math.toRadians(angle);
-            newX = x * Math.cos(radians) - z * Math.sin(radians);
-            newZ = x * Math.sin(radians) + z * Math.cos(radians);
+            double newX = x * Math.cos(radians) - z * Math.sin(radians);
+            double newZ = x * Math.sin(radians) + z * Math.cos(radians);
 
             org.bukkit.util.Vector rotatedVec = new org.bukkit.util.Vector(Math.round(newX), vec.getY(), Math.round(newZ));
 
-            // 2. OBRACANIE KIERUNKU BRAMKI (pole "out")
-            String currentOutStr = data.getString("out", "NORTH").toUpperCase();
-            BlockFace currentOut = BlockFace.valueOf(currentOutStr);
-            BlockFace rotatedOut = rotateFace(currentOut, angle);
+            if (data.contains("out")) {
+                String currentOutStr = data.getString("out", "NORTH").toUpperCase();
+                try {
+                    BlockFace currentOut = BlockFace.valueOf(currentOutStr);
+                    data.set("out", rotateFace(currentOut, angle).name());
+                } catch (IllegalArgumentException ignored) {}
+            }
 
-            data.set("out", rotatedOut.name());
+            String dataStr = data.getString("block_data_str");
+            if (dataStr != null) {
+                data.set("block_data_str", rotateBlockDataString(dataStr, angle));
+            }
 
             rotatedClipboard.put(rotatedVec, data);
         }
@@ -448,12 +506,9 @@ public class SelectionManager implements Listener {
         player.sendMessage(msg.replace("{DEGREE}", String.valueOf(degrees)));
     }
 
-    // Pomocnicza metoda do obracania BlockFace
     private BlockFace rotateFace(BlockFace face, int degrees) {
-        // Ilość kroków o 90 stopni zgodnie z ruchem wskazówek zegara
         int steps = (degrees / 90) % 4;
         if (steps < 0) steps += 4;
-
         BlockFace current = face;
         for (int i = 0; i < steps; i++) {
             current = switch (current) {
@@ -465,5 +520,125 @@ public class SelectionManager implements Listener {
             };
         }
         return current;
+    }
+
+    private String rotateBlockDataString(String dataStr, int degrees) {
+        if (!dataStr.contains("facing=")) return dataStr;
+        for (BlockFace face : new BlockFace[]{BlockFace.NORTH, BlockFace.EAST, BlockFace.SOUTH, BlockFace.WEST}) {
+            if (dataStr.contains("facing=" + face.name().toLowerCase())) {
+                BlockFace rotated = rotateFace(face, degrees);
+                return dataStr.replace("facing=" + face.name().toLowerCase(), "facing=" + rotated.name().toLowerCase());
+            }
+        }
+        return dataStr;
+    }
+
+    public void saveClipboardToFile(Player player, String schemaName) {
+        File schematicsDir = new File(plugin.getDataFolder(), "schematics");
+        File schemaFile = new File(schematicsDir, schemaName.toLowerCase() + ".yml");
+        UUID uuid = player.getUniqueId();
+
+        if (!clipboard.containsKey(uuid) || clipboard.get(uuid).isEmpty()) {
+            player.sendMessage(plugin.getLanguageManager().getWithPrefix("clipboard-empty"));
+            return;
+        }
+
+        if (schemaFile.exists()) {
+            player.sendMessage(plugin.getLanguageManager().getWithPrefix("schema-file-exists").replace("%NAME%", schemaName));
+            return;
+        }
+
+        Map<org.bukkit.util.Vector, ConfigurationSection> playerClipboard = clipboard.get(uuid);
+        long gatesCount = playerClipboard.values().stream().filter(s -> s.getBoolean("is_gate_logic", false)).count();
+
+        plugin.getServer().getAsyncScheduler().runNow(plugin, task -> {
+            if (!schematicsDir.exists()) schematicsDir.mkdirs();
+            FileConfiguration schemaConfig = new YamlConfiguration();
+
+            for (Map.Entry<org.bukkit.util.Vector, ConfigurationSection> entry : playerClipboard.entrySet()) {
+                String vecKey = entry.getKey().getBlockX() + "_" + entry.getKey().getBlockY() + "_" + entry.getKey().getBlockZ();
+                ConfigurationSection fileGateSection = schemaConfig.createSection("schematic_gates." + vecKey);
+                for (String key : entry.getValue().getKeys(true)) {
+                    if ("displayUUID".equals(key)) continue;
+                    fileGateSection.set(key, entry.getValue().get(key));
+                }
+            }
+
+            try {
+                schemaConfig.save(schemaFile);
+                plugin.getServer().getGlobalRegionScheduler().run(plugin, vtask -> {
+                    player.sendMessage(plugin.getLanguageManager().getWithPrefix("schema-save-success").replace("%NAME%", schemaName).replace("%COUNT%", String.valueOf(gatesCount)));
+                });
+            } catch (IOException e) {
+                plugin.getServer().getGlobalRegionScheduler().run(plugin, vtask -> player.sendMessage(plugin.getLanguageManager().getWithPrefix("schema-save-error")));
+                e.printStackTrace();
+            }
+        });
+    }
+
+    public void loadClipboardFromFile(Player player, String schemaName) {
+        File schemaFile = new File(new File(plugin.getDataFolder(), "schematics"), schemaName.toLowerCase() + ".yml");
+
+        if (!schemaFile.exists()) {
+            player.sendMessage(plugin.getLanguageManager().getWithPrefix("schema-not-found").replace("%NAME%", schemaName).replace("{NAME}", schemaName));
+            return;
+        }
+
+        FileConfiguration schemaConfig = YamlConfiguration.loadConfiguration(schemaFile);
+        ConfigurationSection schematicGates = schemaConfig.getConfigurationSection("schematic_gates");
+
+        if (schematicGates == null || schematicGates.getKeys(false).isEmpty()) {
+            player.sendMessage(plugin.getLanguageManager().getWithPrefix("schema-corrupted"));
+            return;
+        }
+
+        Map<org.bukkit.util.Vector, ConfigurationSection> loadedClipboard = new HashMap<>();
+        int loadedGatesCount = 0;
+
+        for (String key : schematicGates.getKeys(false)) {
+            String[] parts = key.split("_");
+            if (parts.length != 3) continue;
+
+            try {
+                org.bukkit.util.Vector vec = new org.bukkit.util.Vector(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]), Integer.parseInt(parts[2]));
+                ConfigurationSection fileData = schematicGates.getConfigurationSection(key);
+                if (fileData == null) continue;
+
+                ConfigurationSection memoryData = new MemoryConfiguration();
+                for (String gateKey : fileData.getKeys(true)) {
+                    memoryData.set(gateKey, fileData.get(gateKey));
+                }
+
+                if (memoryData.getBoolean("is_gate_logic", false)) loadedGatesCount++;
+                loadedClipboard.put(vec, memoryData);
+            } catch (NumberFormatException ignored) {}
+        }
+
+        clipboard.put(player.getUniqueId(), loadedClipboard);
+        player.sendMessage(plugin.getLanguageManager().getWithPrefix("schema-load-success").replace("%NAME%", schemaName).replace("%COUNT%", String.valueOf(loadedGatesCount)));
+    }
+
+    public void deleteClipboardFile(Player player, String schemaName) {
+        plugin.getServer().getAsyncScheduler().runNow(plugin, task -> {
+            File schematicsDir = new File(plugin.getDataFolder(), "schematics");
+            File schemaFile = new File(schematicsDir, schemaName + ".yml");
+
+            if (!schemaFile.exists()) {
+                plugin.getServer().getGlobalRegionScheduler().run(plugin, vtask -> {
+                    player.sendMessage(plugin.getLanguageManager().getWithPrefix("schema-not-found").replace("%NAME%", schemaName));
+                });
+                return;
+            }
+
+            if (schemaFile.delete()) {
+                plugin.getServer().getGlobalRegionScheduler().run(plugin, vtask -> {
+                    player.sendMessage(plugin.getLanguageManager().getWithPrefix("schema-deleted").replace("%NAME%", schemaName));
+                });
+            } else {
+                plugin.getServer().getGlobalRegionScheduler().run(plugin, vtask -> {
+                    player.sendMessage(plugin.getLanguageManager().getWithPrefix("schema-delete-error").replace("%NAME%", schemaName));
+                });
+            }
+        });
     }
 }

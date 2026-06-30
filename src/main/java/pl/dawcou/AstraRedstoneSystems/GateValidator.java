@@ -11,9 +11,7 @@ public class GateValidator {
         // 1. Podstawowa walidacja istnienia typu
         if (type.isEmpty()) return false;
 
-        // 2. KRYTYCZNA OCHRONA: Walidacja kierunku wyjścia (.out)
-        // Jeśli gracz ma błąd w pliku, BlockFace.valueOf rzuci Exception i scrashuje serwer.
-        // Wyłapujemy to tutaj i bezpiecznie odrzucamy bramkę!
+        // Jeśli gracz ma błąd w pliku, wyłapujemy to tutaj i bezpiecznie odrzucamy bramkę
         String outName = config.getString(path + ".out", "NORTH").toUpperCase();
         try {
             BlockFace.valueOf(outName);
@@ -31,11 +29,10 @@ public class GateValidator {
                 if (limit < 1 || limit > 1000) return false;
             }
             case "NUMBER_GATE", "DECODER" -> {
-                // Sprawdzamy czy klucz wartości w ogóle istnieje
                 if (!config.contains(path + ".value")) return false;
             }
             case "MATH" -> {
-                // Sprawdzamy czy tryb działania jest prawidłowy, aby switch w Math nie śwwirował
+                // Sprawdzamy czy tryb działania jest prawidłowy
                 String mode = config.getString(path + ".mode", "ADD").toUpperCase();
                 if (!mode.matches("ADD|SUB|-|MUL|\\*|DIV|/|POW|\\^")) return false;
             }
@@ -47,7 +44,6 @@ public class GateValidator {
                 if (!config.contains(path + ".min") || !config.contains(path + ".max")) return false;
                 int min = config.getInt(path + ".min");
                 int max = config.getInt(path + ".max");
-                // 🔥 OCHRONA: Jeśli min > max, ThreadLocalRandom wywala krytyczny crash serwera!
                 if (min > max) return false;
             }
 
@@ -59,21 +55,17 @@ public class GateValidator {
             }
             case "STRING_COMPARATOR" -> {
                 String mode = config.getString(path + ".mode", "EQUALS").toUpperCase();
-                if (!mode.matches("EQUALS|==|EQUALS_IGNORE_CASE|=I|CONTAINS|STARTS_WITH|ENDS_WITH|EMPTY")) return false;
+                if (!mode.matches("EQUALS|EQUALS_IGNORE_CASE|CONTAINS|STARTS_WITH|ENDS_WITH|EMPTY")) return false;
             }
 
             // ==========================================
             // POZOSTAŁE BRAMKI SYSTEMOWE
             // ==========================================
             case "SENSOR" -> {
-                int radius = config.getInt(path + ".interval", 0);
+                int radius = config.getInt(path + ".radius", 0);
                 if (radius < 1 || radius > 15) return false;
             }
-            case "CLOCK", "CLOCK_GATE" -> {
-                int interval = config.getInt(path + ".interval", 0);
-                if (interval < 5 || interval > 200) return false;
-            }
-            case "REPEATER" -> {
+            case "REPEATER", "CLOCK", "CLOCK_GATE" -> {
                 int interval = config.getInt(path + ".interval", 0);
                 if (interval < 1 || interval > 200) return false;
             }

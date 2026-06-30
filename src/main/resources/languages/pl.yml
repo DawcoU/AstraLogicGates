@@ -26,16 +26,18 @@ messages:
   negative-number: "&cNie możesz wpisać liczby ujemnej!"
   min-greater-than-max: "&cLiczba min nie może być większa od liczby max!"
   not-a-number: "&cTo nie jest liczba!"
-  limit-range: "&cLimit musi być w zakresie 1-100!"
+  limit-range: "&cLimit musi być w zakresie 1-1000!"
   provide-range: "&cPodaj zasięg (1-15)!"
   range-out-of-bounds: "&cZasięg musi być w zakresie 1-15!"
   provide-time: "&cPodaj czas (5t-10s)!"
+  provide-unit: "&cPodaj jednostkę: &e't' &7(ticki) &club &e's' &7(sekundy)&c!"
+  invalid-time-format: "&cPodaj poprawny format (np. 10s)!"
   provide-delay: "&cPodaj opóźnienie (1t-10s)!"
-  provide-unit: "&cPodaj jednostkę: &e't' &7(ticki) lub &e's' &7(sekundy)!"
-  invalid-time-format: "&cPodaj poprawny czas (np. 10s)!"
-  ticks-range: "&cCzas w tickach musi być od 5t do 200t (10s)!"
-  ticks-range-reapeter: "&cCzas w tickach musi być od 1t do 200t (10s)!"
-  seconds-range: "&cCzas w sekundach musi być od 1s do 10s!"
+  ticks-range-repeater: "&cOpóźnienie w tickach musi być od 1t do 200t (10s)!"
+  seconds-range-repeater: "&cOpóźnienie w sekundach musi być od 1s do 10s!"
+  provide-frequency: "&cPodaj częstotliwość (1t-10s)!"
+  ticks-range-clock: "&cCzęstotliwość w tickach musi być od 1t do 200t (10s)!"
+  seconds-range-clock: "&cCzęstotliwość w sekundach musi być od 1s do 10s!"
 
   # Wiadomości z interacją bramek
   gate-item-name-prefix: "&4Bramka: &c"
@@ -77,7 +79,7 @@ messages:
 
   # Kopiowanie wklejanie obracanie i cofnięcia
   copy-success: "&aSkopiowano &e{COUNT} &abramek do schowka!"
-  clipboard-empty: "&cTwój schowek jest pusty! Najpierw użyj /alg copy"
+  clipboard-empty: "&cTwój schowek jest pusty! Najpierw użyj /ars copy"
   paste-success: "&aPomyślnie wklejono &e{COUNT} &abramek!"
   rotate-success: "&7Obrócono zawartość schowka o &f{DEGREE} &7stopni"
   invalid-rotate-angle: "&cNieprawidłowy kąt! Użyj 90, -90 lub 180"
@@ -85,6 +87,21 @@ messages:
   nothing-to-undo: "&cNie masz nic do cofnięcia!"
   redo-success: "&ePrzywrócono ostatnie cofnięcie (&7{COUNT} &ebramek)"
   nothing-to-redo: "&cNie masz nic do przywrócenia (Redo)!"
+
+  # Schematy
+  schema-save-success: "&aSchemat &e%NAME% &azostał pomyślnie zapisany na dysku! &7(%COUNT% bramek)"
+  schema-save-error: "&cWystąpił krytyczny błąd podczas zapisu schematu!"
+  schema-not-found: "&cNie znaleziono pliku schematu o nazwie &e%NAME%.yml &cw folderze pluginu"
+  schema-corrupted: "&cPlik schematu jest pusty, uszkodzony lub ma nieprawidłową strukturę YAML"
+  schema-load-success: "&aSchemat &e%NAME% &7(%COUNT% bramek) &azostał załadowany do schowka! Wpisz komendę wklejenia, aby go umieścić w świecie"
+  schema-specify-action: "&cMusisz wybrać akcję! Prawidłowe użycie: &e/ars schematic <save/load/delete> [nazwa]"
+  schema-unknown-action: "&cNieznana akcja schematu! Dostępne opcje to: &esave&c, &eload &club &edelete"
+  schema-specify-name: "&cMusisz podać nazwę schematu! Prawidłowe użycie: &e/ars schematic <save/load/delete> [nazwa]"
+  schema-invalid-name: "&cNazwa schematu zawiera niedozwolone znaki! Używaj tylko liter, cyfr, _ oraz -"
+  schema-deleted: "&aPomyślnie usunięto schemat &e%NAME%.yml &az plików serwera"
+  schema-delete-error: "&cWystąpił błąd podczas usuwania pliku &e%NAME%.yml&c!"
+  schema-file-exists: "&cPlik schematu &e%NAME%.yml &cjuż istnieje!"
+  schema-usage-delete: "&cPoprawne użycie: &e/ars schematic delete <nazwa>"
 
   # Inne
   gate-received: "&aOtrzymałeś bramkę: &e{TYPE}"

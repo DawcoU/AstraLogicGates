@@ -49,10 +49,7 @@ public class SpaceGates {
 
             BlockFace out = BlockFace.valueOf(config.getString(path + ".out", "NORTH").toUpperCase());
             BlockFace back = out.getOppositeFace();
-
-            boolean currentState = config.getBoolean(path + ".state", false);
             Block target = gate.getRelative(out);
-            boolean newState = currentState;
 
             // --- SWITCH LOGIKI ---
             switch (type) {
@@ -60,104 +57,93 @@ public class SpaceGates {
                     String rawChannels = config.getString(path + ".channel", "default");
                     String[] splitChannels = rawChannels.split(",");
 
-                    // 1. Pobieramy uniwersalny sygnał jako String z tyłu
+                    // 1. Pobieranie danych
                     String incomingData = GateUtils.getStringFrom(gate.getRelative(back), back.getOppositeFace(), plugin);
+                    int traditionalPower = GateUtils.getPowerAt(gate.getRelative(back));
 
-                    // 2. Jeśli z tyłu nie ma sygnału tekstowego, sprawdzamy tradycyjny redstone / dźwignię
-                    if (incomingData.isEmpty()) {
-                        int traditionalPower = GateUtils.getPowerAt(gate.getRelative(back));
-                        if (traditionalPower > 0) {
-                            incomingData = "1";
-                        }
+                    // 2. Protokół: Ustalamy co ma lecieć na magistralę
+                    String signalToBroadcast = null;
+
+                    if (!incomingData.isEmpty() && !incomingData.equals("-2147483648") && !incomingData.equals("-9223372036854775808")) {
+                        signalToBroadcast = incomingData;
+                    } else if (traditionalPower > 0) {
+                        signalToBroadcast = "_REDSTONE_";
                     }
 
-                    // 🛡SYSTEMOWA OCHRONA KANAŁÓW
-                    if (incomingData.equals("-2147483648") || incomingData.equals("-9223372036854775808")) {
-                        incomingData = "";
-                    }
-
-                    boolean hasValue = !incomingData.isEmpty();
-
-                    // SPRAWDZANIE ZMIANY STANÓW (Aby nadajniki się nie zagłuszały)
+                    // 3. Sprawdzanie zmiany stanu
                     String lastTransmitted = config.getString(path + ".current_out", "");
+                    String currentVal = (signalToBroadcast != null) ? signalToBroadcast : "";
 
-                    if (!incomingData.equals(lastTransmitted)) {
-                        // Zapamiętujemy nowy stan tego konkretnego nadajnika w configu
-                        config.set(path + ".current_out", incomingData);
-                        config.set(path + ".state", hasValue);
+                    if (!currentVal.equals(lastTransmitted)) {
+                        config.set(path + ".current_out", currentVal);
+                        config.set(path + ".state", signalToBroadcast != null);
 
-                        // 3. Rozsyłamy dane na kanały tylko przy realnej zmianie!
                         for (String chan : splitChannels) {
                             String trimmed = chan.trim();
-                            config.set("channels." + trimmed, incomingData);
-
-                            if (!hasValue) {
-                                config.set("active_channels." + trimmed, null);
-                            }
+                            config.set("channels." + trimmed, signalToBroadcast);
+                            config.set("active_channels." + trimmed, signalToBroadcast != null);
                         }
                     }
 
-                    // BEZPIECZNE SPRAWDZANIE CZY KTÓRYKOLWIEK KANAŁ MA AKTYWNEGO ODBIORNIKA
+                    // 4. Bezpieczne sprawdzanie listenerów
                     boolean hasListener = false;
                     for (String chan : splitChannels) {
                         if (config.getBoolean("active_channels." + chan.trim(), false)) {
                             hasListener = true;
-                            break; // Znaleźliśmy chociaż jednego odbiorcę, nie trzeba sprawdzać reszty
+                            break;
                         }
                     }
 
-                    // Dymek na wyjściu (out) pojawia się TYLKO gdy leci prąd I ktoś go słucha!
-                    boolean isTransmitting = hasValue && hasListener;
+                    // 5. Particle
+                    boolean isTransmitting = (signalToBroadcast != null) && hasListener;
                     GateUtils.spawnStatusParticle(gate, out, isTransmitting);
-
-                    // Dymek z tyłu (back) informuje o prądzie wejściowym
-                    GateUtils.spawnStatusParticle(gate, back, hasValue);
-
-                    newState = false;
+                    GateUtils.spawnStatusParticle(gate, back, signalToBroadcast != null);
                 }
 
                 case "RECEIVER" -> {
                     String channel = config.getString(path + ".channel", "default").trim().replace(" ", "");
+                    String payload = config.getString("channels." + channel, "");
 
-                    config.set("active_channels." + channel, true);
+                    boolean shouldOutput = false;
+                    String dataToPass = "";
 
-                    // Pobieramy dane z kanału zawsze jako String
-                    String transmittedData = config.getString("channels." + channel, "");
-
-                    //  DODATKOWA OCHRONA ODBIORNIKA
-                    if (transmittedData.equals("-2147483648") || transmittedData.equals("-9223372036854775808")) {
-                        transmittedData = "";
+                    if (payload.equals("_REDSTONE_")) {
+                        // To jest tylko prąd, nie traktuj tego jako dane!
+                        shouldOutput = true;
+                        dataToPass = ""; // Puste dane, sam sygnał
+                    } else if (!payload.isEmpty()) {
+                        // To są realne dane
+                        shouldOutput = true;
+                        dataToPass = payload;
                     }
 
-                    boolean hasReceivedPower = !transmittedData.isEmpty();
-                    newState = hasReceivedPower;
+                    // Zapis stanu
+                    config.set(path + ".current_out", dataToPass);
+                    config.set(path + ".state", shouldOutput);
 
-                    config.set(path + ".current_out", transmittedData);
-                    config.set(path + ".state", hasReceivedPower);
-
-                    GateUtils.updateOutput(plugin, path, target, hasReceivedPower);
-
-                    GateUtils.spawnStatusParticle(gate, out, newState);
+                    // Update Output
+                    GateUtils.updateOutput(plugin, path, target, shouldOutput);
+                    GateUtils.spawnStatusParticle(gate, out, shouldOutput);
                 }
 
                 case "SENSOR" -> {
-                    int radius = config.getInt(path + ".interval", 5);
+                    // Rzutujemy na double, żeby Paper idealnie obliczył wektory zasięgu wokół bloku
+                    double radius = config.getInt(path + ".radius", 5);
                     boolean found = false;
-                    for (Entity entity : gate.getWorld().getNearbyEntities(gate.getLocation(), radius, radius, radius)) {
-                        if (entity instanceof Player) {
-                            found = true;
-                            break;
-                        }
-                    }
-                    newState = found;
-                    GateUtils.spawnStatusParticle(gate, out, newState);
-                }
-            }
 
-            // --- UNIWERSALNA AKTUALIZACJA ---
-            if (newState != currentState) {
-                config.set(path + ".state", newState);
-                GateUtils.updateOutput(plugin, path, target, newState);
+                    // Pobieramy tylko graczy w promieniu – to na pewno zadziała i nie zlaguje serwera
+                    java.util.Collection<Player> players = gate.getWorld().getNearbyPlayers(gate.getLocation(), radius, radius, radius);
+                    if (!players.isEmpty()) {
+                        found = true;
+                    }
+
+                    if (found != config.getBoolean(path + ".state", false)) {
+                        config.set(path + ".state", found);
+                        GateUtils.updateOutput(plugin, path, target, found);
+                    }
+
+                    GateUtils.spawnStatusParticle(gate, out, found);
+                }
             }
         }
     }

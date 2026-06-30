@@ -18,6 +18,7 @@ public class FilesConverter {
     public void runAllMigrations() {
         // Konwersja bramek
         migrateFile("gates.yml", "logic_gates.yml");
+        renameGates();
     }
 
     // Uniwersalna metoda do przenoszenia plików
@@ -39,6 +40,43 @@ public class FilesConverter {
                 }
             } catch (IOException e) {
                 plugin.getNoticeManager().sendErrorNotice(oldName);
+                e.printStackTrace();
+            }
+        }
+    }
+
+    private void renameGates() {
+        File gatesFile = new File(plugin.getDataFolder(), "logic_gates.yml");
+
+        if (gatesFile.exists()) {
+            try {
+                FileConfiguration config = YamlConfiguration.loadConfiguration(gatesFile);
+                ConfigurationSection gatesSection = config.getConfigurationSection("gates");
+
+                if (gatesSection != null) {
+                    boolean changesMade = false;
+
+                    // Przejeżdżamy po lokalizacjach bramek
+                    for (String key : gatesSection.getKeys(false)) {
+                        ConfigurationSection singleGate = gatesSection.getConfigurationSection(key);
+                        if (singleGate == null) continue;
+
+                        if (singleGate.contains("type")) {
+                            String currentType = singleGate.getString("type");
+
+                            if ("VARIABLE_GATE".equals(currentType)) {
+                                singleGate.set("type", "DISK_GATE");
+                                changesMade = true;
+                            }
+                        }
+                    }
+
+                    if (changesMade) {
+                        config.save(gatesFile);
+                    }
+                }
+
+            } catch (IOException e) {
                 e.printStackTrace();
             }
         }

@@ -1,14 +1,13 @@
 package pl.dawcou.AstraRedstoneSystems;
 
-import org.bukkit.Bukkit;
-import org.bukkit.Location;
-import org.bukkit.Material;
+import org.bukkit.*;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.TextDisplay;
+import org.bukkit.util.Transformation;
 
 import java.util.UUID;
 
@@ -170,6 +169,66 @@ public class GateUtils {
         } catch (Exception e) {
             // Zabezpieczenie przed uwaleniem pętli
         }
+    }
+
+    public static String createDisplay(Location blockLoc, String outName) {
+        World world = blockLoc.getWorld();
+        if (world == null) return "";
+
+        Location displayLoc = blockLoc.clone().add(0.5, 2.0, 0.5);
+
+        switch (outName.toUpperCase()) {
+            case "NORTH" -> displayLoc.add(0, 0, -2.0);
+            case "SOUTH" -> displayLoc.add(0, 0, 2.0);
+            case "EAST"  -> displayLoc.add(2.0, 0, 0);
+            case "WEST"  -> displayLoc.add(-2.0, 0, 0);
+        }
+
+        TextDisplay textDisplay = world.spawn(displayLoc, TextDisplay.class);
+
+        textDisplay.setBackgroundColor(Color.fromARGB(0, 0, 0, 0));
+        textDisplay.setShadowed(false);
+        textDisplay.setAlignment(TextDisplay.TextAlignment.CENTER);
+        textDisplay.setBillboard(TextDisplay.Billboard.CENTER);
+
+        Transformation transformation = textDisplay.getTransformation();
+        transformation.getScale().set(4f, 4f, 4f);
+        textDisplay.setTransformation(transformation);
+
+        return textDisplay.getUniqueId().toString();
+    }
+
+    public static String validateDisplay(FileConfiguration config, String path, Location gateLoc) {
+        String uuidStr = config.getString(path + ".displayUUID");
+        String outName = config.getString(path + ".out", "NORTH");
+
+        // Obliczamy lokalizację do szybkiego sprawdzenia chunku
+        Location displayLoc = gateLoc.clone().add(0.5, 2.0, 0.5);
+        switch (outName.toUpperCase()) {
+            case "NORTH" -> displayLoc.add(0, 0, -2.0);
+            case "SOUTH" -> displayLoc.add(0, 0, 2.0);
+            case "EAST"  -> displayLoc.add(2.0, 0, 0);
+            case "WEST"  -> displayLoc.add(-2.0, 0, 0);
+        }
+
+        // Blokada anty-lagowa: jeśli chunk jest niezaładowany, nie dotykamy encji
+        if (!displayLoc.getChunk().isLoaded()) {
+            return uuidStr != null ? uuidStr : "";
+        }
+
+        // Sprawdzamy czy istnieje
+        try {
+            if (uuidStr != null && !uuidStr.isEmpty()) {
+                Entity entity = Bukkit.getEntity(UUID.fromString(uuidStr));
+
+                if (entity instanceof TextDisplay) {
+                    return uuidStr;
+                }
+            }
+        } catch (Exception ignored) {}
+
+        // Jeśli chunk jest załadowany, ale nie ma hologramu -> tworzymy od nowa
+        return createDisplay(gateLoc, outName);
     }
 
     public static void updateDisplayNumber(AstraRS plugin, String uuidStr, String value) {

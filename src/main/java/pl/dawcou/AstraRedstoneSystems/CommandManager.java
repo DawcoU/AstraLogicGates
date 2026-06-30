@@ -5,6 +5,7 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 
+import java.io.File;
 import java.util.*;
 
 public class CommandManager implements org.bukkit.command.CommandExecutor, org.bukkit.command.TabCompleter {
@@ -20,6 +21,10 @@ public class CommandManager implements org.bukkit.command.CommandExecutor, org.b
     @Override
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
         if (label.equalsIgnoreCase("astraredstonesystems") || label.equalsIgnoreCase("ars")) {
+            // Sprawdzamy, czy gracz wpisał chociaż jeden argument
+            if (args.length == 0) {
+                return true;
+            }
 
             // --- RELOAD ---
             if (args.length == 1 && args[0].equalsIgnoreCase("reload")) {
@@ -150,6 +155,82 @@ public class CommandManager implements org.bukkit.command.CommandExecutor, org.b
                 }
                 return true;
             }
+
+            if (args[0].equalsIgnoreCase("schematic") || args[0].equalsIgnoreCase("schematics")) {
+                if (!player.hasPermission("astrars.admin")) {
+                    player.sendMessage(plugin.getLanguageManager().getWithPrefix("no-permission"));
+                    return true;
+                }
+
+                // 1. Sprawdzamy, czy gracz w ogóle podał drugi argument (save lub load)
+                if (args.length < 2) {
+                    String msg = plugin.getLanguageManager().getWithPrefix("schema-specify-action");
+                    if (msg != null) {
+                        player.sendMessage(msg);
+                    }
+                    return true;
+                }
+
+                // --- PODKOMENDA: SAVE (/ars schematic save <nazwa>) ---
+                if (args[1].equalsIgnoreCase("save")) {
+                    // Sprawdzamy, czy podano nazwę (musi być args[2])
+                    if (args.length < 3) {
+                        String msg = plugin.getLanguageManager().getWithPrefix("schema-specify-name");
+                        if (msg != null) {
+                            player.sendMessage(msg);
+                        }
+                        return true;
+                    }
+
+                    String schemaName = args[2];
+
+                    // Bezpieczna weryfikacja nazwy pliku
+                    if (!schemaName.matches("[a-zA-Z0-9_#-]+")) {
+                        String invalidNameMsg = plugin.getLanguageManager().getWithPrefix("schema-invalid-name");
+                        if (invalidNameMsg != null) {
+                            player.sendMessage(invalidNameMsg);
+                        }
+                        return true;
+                    }
+
+                    selectionManager.saveClipboardToFile(player, schemaName);
+                    return true;
+                }
+
+                // --- PODKOMENDA: LOAD (/ars schematic load <nazwa>) ---
+                if (args[1].equalsIgnoreCase("load")) {
+                    // Sprawdzamy, czy podano nazwę (musi być args[2])
+                    if (args.length < 3) {
+                        String msg = plugin.getLanguageManager().getWithPrefix("schema-specify-name");
+                        if (msg != null) {
+                            player.sendMessage(msg);
+                        }
+                        return true;
+                    }
+
+                    String schemaName = args[2];
+                    selectionManager.loadClipboardFromFile(player, schemaName);
+                    return true;
+                }
+
+                // --- PODKOMENDA: DELETE (/ars schematic delete <nazwa>) ---
+                if (args[1].equalsIgnoreCase("delete")) {
+                    // 1. Sprawdzamy, czy podano nazwę (musi być args[2])
+                    if (args.length < 3) {
+                        String msg = plugin.getLanguageManager().getWithPrefix("schema-specify-name");
+                        if (msg != null) {
+                            player.sendMessage(msg);
+                        }
+                        return true;
+                    }
+
+                    String schemaName = args[2];
+
+                    // 3. Wywołanie ukrytej logiki z menedżera
+                    selectionManager.deleteClipboardFile(player, schemaName);
+                    return true;
+                }
+            }
         }
         return true;
     }
@@ -159,25 +240,47 @@ public class CommandManager implements org.bukkit.command.CommandExecutor, org.b
         List<String> hints = new ArrayList<>();
         String cmd = command.getName();
 
-        if (cmd.equalsIgnoreCase("astraredstonesystems") || cmd.equalsIgnoreCase("ars")) {
+        if (cmd.equalsIgnoreCase("astraredstonesystems") || cmd.equalsIgnoreCase("ars") || cmd.equalsIgnoreCase("bramka")) {
             if (args.length == 1) {
-                // Podpowiedzi dla głównej komendy
-                Arrays.asList("info", "reload", "selector", "cut", "paste", "copy", "rotate", "undo", "redo")
+                // Podpowiedzi dla głównej komendy (args[0])
+                Arrays.asList("info", "reload", "selector", "cut", "paste", "copy", "rotate", "undo", "redo", "schematic")
                         .forEach(a -> {
                             if (a.startsWith(args[0].toLowerCase())) hints.add(a);
                         });
 
             } else if (args.length == 2) {
-                // Podpowiedzi dla drugiego argumentu
+                // Podpowiedzi dla drugiego argumentu (args[1])
                 List<String> subArgs = switch (args[0].toLowerCase()) {
                     case "rotate" -> Arrays.asList("90", "-90", "180");
+                    // TUTAJ POPRAWA: Dla schematic podpowiadamy akcje, a nie plik!
+                    case "schematic", "schematics" -> Arrays.asList("save", "load", "delete");
                     default -> Collections.emptyList();
                 };
 
-                // Używamy toLowerCase() dla bezpieczeństwa, choć przy liczbach to formalność
                 subArgs.forEach(t -> {
-                    if (t.startsWith(args[1].toLowerCase())) hints.add(t);
+                    if (t.toLowerCase().startsWith(args[1].toLowerCase())) hints.add(t);
                 });
+
+            } else if (args.length == 3) {
+                // Podpowiedzi dla trzeciego argumentu (args[2])
+                if (args[0].equalsIgnoreCase("schematic") || args[0].equalsIgnoreCase("schematics")) {
+
+                    // Jeśli gracz wpisał /bramka schematic load -> podpowiadamy ISTNIEJĄCE pliki z dysku!
+                    if (args[1].equalsIgnoreCase("load") || args[1].equalsIgnoreCase("delete")) {
+                        File schematicsDir = new File(plugin.getDataFolder(), "schematics");
+                        if (schematicsDir.exists() && schematicsDir.isDirectory()) {
+                            File[] files = schematicsDir.listFiles((dir, name) -> name.toLowerCase().endsWith(".yml"));
+                            if (files != null) {
+                                for (File file : files) {
+                                    String fileName = file.getName().substring(0, file.getName().length() - 4);
+                                    if (fileName.toLowerCase().startsWith(args[2].toLowerCase())) {
+                                        hints.add(fileName);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
         return hints;

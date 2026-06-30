@@ -39,64 +39,66 @@ public class MemoryGates {
             // UJEDNOLICONE ZMIENNE KIERUNKOWE
             BlockFace out = BlockFace.valueOf(config.getString(path + ".out", "NORTH").toUpperCase());
             BlockFace back = out.getOppositeFace();
-            BlockFace s1 = GateUtils.rotate90(out);
-            BlockFace s2 = s1.getOppositeFace();
+            BlockFace right = GateUtils.rotate90(out);
+            BlockFace left = right.getOppositeFace();
 
             Block target = gate.getRelative(out);
 
             // POBIERANIE SYGNAŁÓW WEJŚCIOWYCH
             boolean pBack = GateUtils.getPowerAt(gate.getRelative(back)) > 0;
-            boolean pS1 = GateUtils.getPowerAt(gate.getRelative(s1)) > 0;
-            boolean pS2 = GateUtils.getPowerAt(gate.getRelative(s2)) > 0;
+            boolean pRight = GateUtils.getPowerAt(gate.getRelative(right)) > 0;
+            boolean pLeft = GateUtils.getPowerAt(gate.getRelative(left)) > 0;
 
             boolean oldState = config.getBoolean(path + ".state", false);
             boolean newState = oldState;
 
-            // --- PARTICLE STATUSU ---
-            if (type.matches("LATCH|MEMORY_CELL|MEMORY_READ|TFF|TFF")) {
-                GateUtils.spawnStatusParticle(gate, out, oldState);
-            }
-
-            // Boki (S1, S2) dla Latchy i komórek pamięci
-            if (type.matches("LATCH|MEMORY_CELL|MEMORY_READ")) {
-                GateUtils.spawnStatusParticle(gate, s1, pS1);
-                GateUtils.spawnStatusParticle(gate, s2, pS2);
-            }
-
-            // Tył (BACK) dla wejść danych lub TFF
-            if (type.matches("TFF|MEMORY_CELL|MEMORY_READ")) {
-                GateUtils.spawnStatusParticle(gate, back, pBack);
-            }
-
             // LOGIKA BRAMEK
             switch (type) {
                 case "LATCH" -> {
-                    // RS Latch: s1 = Set, s2 = Reset
-                    if (pS1) newState = true;
-                    else if (pS2) newState = false;
+                    // RS Latch: right = Set, left = Reset
+                    if (pRight) newState = true;
+                    else if (pLeft) newState = false;
                 }
                 case "MEMORY_CELL" -> {
-                    // D-Latch: Tył = Data, s2 = Write, s1 = Reset
-                    if (pS2) newState = pBack;
-                    else if (pS1) newState = false;
-                }
-                case "MEMORY_READ" -> {
-                    // Odczyt: pBack (Dane) && (pS1 || pS2) (Sygnał odczytu)
-                    newState = (pBack && (pS1 || pS2));
+                    // Tył = Data, Prawo = Write, Lewo = Read
+
+                    boolean memory = config.getBoolean(path + ".memory", false);
+
+                    // ZAPIS
+                    if (pRight) {
+                        memory = pBack;
+                        config.set(path + ".memory", memory);
+                    }
+
+                    // ODCZYT
+                    newState = memory && pLeft;
                 }
                 case "TFF" -> {
                     // Toggle Flip-Flop: Zbocze narastające na tyłach
                     boolean lastIn = config.getBoolean(path + ".lastInput", false);
-                    if (pBack && !lastIn) {
-                        newState = !oldState;
+                    if (pBack != lastIn) {
+                        if (pBack) { // Jeśli to zbocze narastające (wejście prądu)
+                            newState = !oldState;
+                        }
+                        config.set(path + ".lastInput", pBack);
                     }
-                    config.set(path + ".lastInput", pBack);
                 }
             }
 
             if (newState != oldState) {
                 config.set(path + ".state", newState);
                 GateUtils.updateOutput(plugin, path, target, newState);
+            }
+
+            if (type.matches("LATCH|MEMORY_CELL|TFF")) {
+                GateUtils.spawnStatusParticle(gate, out, newState);
+            }
+            if (type.matches("LATCH|MEMORY_CELL")) {
+                GateUtils.spawnStatusParticle(gate, right, pRight);
+                GateUtils.spawnStatusParticle(gate, left, pLeft);
+            }
+            if (type.matches("TFF|MEMORY_CELL")) {
+                GateUtils.spawnStatusParticle(gate, back, pBack);
             }
         }
     }

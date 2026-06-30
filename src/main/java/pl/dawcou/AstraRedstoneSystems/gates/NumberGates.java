@@ -39,17 +39,16 @@ public class NumberGates {
             Block gate = loc.getBlock();
             String type = config.getString(path + ".type", "").toUpperCase();
 
-            if (!type.matches("NUMBER_GATE|COUNTER|BOOLEAN_GATE|MATH|COMPARATOR|DECODER|RANDOM_BOOLEAN|RANDOM_NUMBER|DECIMAL_ACCUMULATOR")) continue;
-
             // --- INICJALIZACJA KIERUNKÓW ---
             String outName = config.getString(path + ".out", "NORTH");
             BlockFace out = BlockFace.valueOf(outName.toUpperCase());
             BlockFace back = out.getOppositeFace();
-            BlockFace s1 = GateUtils.rotate90(out);
-            BlockFace s2 = s1.getOppositeFace();
+            BlockFace rightFace = GateUtils.rotate90(out);
+            BlockFace leftFace = rightFace.getOppositeFace();
             Block target = gate.getRelative(out);
 
             boolean currentState = config.getBoolean(path + ".state", false);
+            boolean pBack = GateUtils.getPowerAt(gate.getRelative(back)) > 0;
 
             // --- EFEKTY WIZUALNE STATUSU ---
 
@@ -60,9 +59,7 @@ public class NumberGates {
 
             // 2. EFEKT WEJŚCIA Z TYŁU
             if (type.matches("NUMBER_GATE|BOOLEAN_GATE|DECODER|RANDOM_BOOLEAN|RANDOM_NUMBER|COUNTER|DECIMAL_ACCUMULATOR")) {
-                boolean pBack = GateUtils.getPowerAt(gate.getRelative(back)) > 0;
 
-                // Dodajemy DECIMAL_ACCUMULATOR tutaj
                 if (type.equals("COUNTER") || type.equals("DECIMAL_ACCUMULATOR")) {
                     long vBack = GateUtils.getNumberFrom(gate.getRelative(back), back.getOppositeFace(), plugin);
                     // Świeci jeśli idzie liczba LUB prąd
@@ -74,8 +71,8 @@ public class NumberGates {
 
             // 3. EFEKT WEJŚĆ BOCZNYCH
             if (type.matches("COUNTER|MATH|COMPARATOR|DECIMAL_ACCUMULATOR")) {
-                BlockFace faceL = s2;
-                BlockFace faceR = s1;
+                BlockFace faceL = leftFace;
+                BlockFace faceR = rightFace;
 
                 if (type.equals("COUNTER") || type.equals("MATH") || type.equals("DECIMAL_ACCUMULATOR") || type.equals("COMPARATOR")) {
                     // LEWO
@@ -98,7 +95,6 @@ public class NumberGates {
             // --- LOGIKA BRAMEK ---
             switch (type) {
                 case "NUMBER_GATE" -> {
-                    boolean pBack = GateUtils.getPowerAt(gate.getRelative(back)) > 0;
                     long storedValue = config.getLong(path + ".value", 0);
 
                     // LOGIKA: Jeśli OFF -> Long.MIN_VALUE, Jeśli ON -> storedValue
@@ -212,15 +208,15 @@ public class NumberGates {
                                     AstraRS.DEBUG_PREFIX + "§5COUNTER §7na §e" + key + " §7-> Nowy stan licznika: §d§l" + count + "§7/§5" + limit
                             );
                         }
-                    }
 
-                    String countStr = String.valueOf(count);
-                    config.set(path + ".current_out", countStr);
-                    config.set(path + ".last_data_back", dataBack);
-                    config.set(path + ".last_data_left", dataLeft);
-                    config.set(path + ".last_back", pB);
-                    config.set(path + ".last_left", pL);
-                    config.set(path + ".last_right", pR);
+                        String countStr = String.valueOf(count);
+                        config.set(path + ".current_out", countStr);
+                        config.set(path + ".last_data_back", dataBack);
+                        config.set(path + ".last_data_left", dataLeft);
+                        config.set(path + ".last_back", pB);
+                        config.set(path + ".last_left", pL);
+                        config.set(path + ".last_right", pR);
+                    }
                 }
 
                 case "MATH" -> {
@@ -311,7 +307,9 @@ public class NumberGates {
                         }
                         // Jeśli sygnał zniknął, resetujemy "last_input", żeby pozwolić na kolejny impuls
                         else if (inputVal == Long.MIN_VALUE) {
-                            config.set(path + ".last_input", Long.MIN_VALUE);
+                            if (config.getLong(path + ".last_input", Long.MIN_VALUE) != Long.MIN_VALUE) {
+                                config.set(path + ".last_input", Long.MIN_VALUE);
+                            }
                         }
                     }
                 }
@@ -411,7 +409,10 @@ public class NumberGates {
                         config.set(path + ".state", isActive);
                         GateUtils.updateOutput(plugin, path, target, isActive);
                     }
-                    config.set(path + ".lastInput", in);
+
+                    if (in != lastIn) {
+                        config.set(path + ".lastInput", in);
+                    }
                 }
             }
         }

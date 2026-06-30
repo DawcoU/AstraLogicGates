@@ -37,59 +37,45 @@ public class BasicGates {
             // UJEDNOLICONE ZMIENNE
             BlockFace out = BlockFace.valueOf(config.getString(path + ".out", "NORTH").toUpperCase());
             BlockFace back = out.getOppositeFace();
-            BlockFace s1 = GateUtils.rotate90(out);
-            BlockFace s2 = s1.getOppositeFace();
+            BlockFace right = GateUtils.rotate90(out);
+            BlockFace left = right.getOppositeFace();
 
             boolean currentState = config.getBoolean(path + ".state", false);
             Block target = gate.getRelative(out);
 
             // POBIERANIE SYGNAŁÓW
             boolean pBack = GateUtils.getPowerAt(gate.getRelative(back)) > 0;
-            boolean pS1 = GateUtils.getPowerAt(gate.getRelative(s1)) > 0;
-            boolean pS2 = GateUtils.getPowerAt(gate.getRelative(s2)) > 0;
+            boolean pRight = GateUtils.getPowerAt(gate.getRelative(right)) > 0;
+            boolean pLeft = GateUtils.getPowerAt(gate.getRelative(left)) > 0;
 
             // --- PARTICLE STATUSU (WEJŚCIA) ---
-            // Usunęliśmy stąd rysowanie przodu (out), zostały tylko wejścia!
             if (type.matches("OR|NOR|AND|NAND|XOR|XNOR|NIMPLY|IMPLY|MUX")) {
-                GateUtils.spawnStatusParticle(gate, s1, pS1);
-                GateUtils.spawnStatusParticle(gate, s2, pS2);
+                GateUtils.spawnStatusParticle(gate, right, pRight);
+                GateUtils.spawnStatusParticle(gate, left, pLeft);
             }
-            if (type.matches("NOT|BUFFER|NIMPLY|IMPLY|MUX|PULSER")) {
+            if (type.matches("NOT|BUFFER|NIMPLY|IMPLY|MUX")) {
                 GateUtils.spawnStatusParticle(gate, back, pBack);
             }
 
             // LOGIKA
-            boolean newState = false;
-
-            newState = switch (type) {
+            boolean newState = switch (type) {
                 case "NOT" -> !pBack;
-                case "OR" -> (pS1 || pS2 || pBack);
-                case "NOR" -> !(pS1 || pS2 || pBack);
-                case "AND" -> (pS1 && pS2);
-                case "NAND" -> !(pS1 && pS2);
-                case "XOR" -> (pS1 ^ pS2);
-                case "XNOR" -> (pS1 == pS2);
-                case "IMPLY" -> !pBack || (pS1 || pS2);
-                case "NIMPLY" -> pBack && !(pS1 || pS2);
+                case "OR" -> (pRight || pLeft || pBack);
+                case "NOR" -> !(pRight || pLeft || pBack);
+                case "AND" -> (pRight && pLeft);
+                case "NAND" -> !(pRight && pLeft);
+                case "XOR" -> (pRight ^ pLeft);
+                case "XNOR" -> (pRight == pLeft);
+                case "IMPLY" -> !pBack || (pRight || pLeft);
+                case "NIMPLY" -> pBack && !(pRight || pLeft);
                 case "BUFFER" -> pBack;
-                case "MUX" -> pBack ? pS1 : pS2;
-                case "PULSER" -> {
-                    boolean in = GateUtils.getPowerAt(gate.getRelative(back)) > 0;
-                    boolean lastIn = config.getBoolean(path + ".last_input_state", false);
-                    boolean result = false;
-
-                    if (in && !lastIn) {
-                        result = true;
-                    }
-                    config.set(path + ".last_input_state", in);
-                    yield result;
-                }
+                case "MUX" -> pBack ? pRight : pLeft;
                 case "SYNCHRONIZER" -> {
-                    boolean pA = GateUtils.getPowerAt(gate.getRelative(s1).getRelative(back)) > 0;
-                    boolean pB = GateUtils.getPowerAt(gate.getRelative(s2).getRelative(back)) > 0;
+                    boolean pA = GateUtils.getPowerAt(gate.getRelative(right).getRelative(back)) > 0;
+                    boolean pB = GateUtils.getPowerAt(gate.getRelative(left).getRelative(back)) > 0;
 
-                    GateUtils.spawnStatusParticle(gate.getRelative(s1), back, pA);
-                    GateUtils.spawnStatusParticle(gate.getRelative(s2), back, pB);
+                    GateUtils.spawnStatusParticle(gate.getRelative(right), back, pA);
+                    GateUtils.spawnStatusParticle(gate.getRelative(left), back, pB);
 
                     yield (pA && pB);
                 }
@@ -98,26 +84,25 @@ public class BasicGates {
 
             // --- UNIWERSALNA AKTUALIZACJA ---
             if (type.equals("SYNCHRONIZER")) {
-                GateUtils.spawnStatusParticle(gate.getRelative(s1), out, newState);
-                GateUtils.spawnStatusParticle(gate.getRelative(s2), out, newState);
+                GateUtils.spawnStatusParticle(gate.getRelative(right), out, newState);
+                GateUtils.spawnStatusParticle(gate.getRelative(left), out, newState);
 
                 String sideLLoc = config.getString(path + ".sideL");
                 String sideRLoc = config.getString(path + ".sideR");
 
                 if (sideLLoc != null) {
-                    GateUtils.updateOutput(plugin, "gates." + sideLLoc, gate.getRelative(s1).getRelative(out), newState);
+                    GateUtils.updateOutput(plugin, "gates." + sideLLoc, gate.getRelative(right).getRelative(out), newState);
                 }
                 if (sideRLoc != null) {
-                    GateUtils.updateOutput(plugin, "gates." + sideRLoc, gate.getRelative(s2).getRelative(out), newState);
+                    GateUtils.updateOutput(plugin, "gates." + sideRLoc, gate.getRelative(left).getRelative(out), newState);
                 }
             } else {
-                // 1. Najpierw aktualizujemy blok fizyczny w świecie
-                GateUtils.updateOutput(plugin, path, target, newState);
+                if (newState != currentState) {
+                    GateUtils.updateOutput(plugin, path, target, newState);
+                    config.set(path + ".state", newState);
+                }
 
-                // 2. Zapisujemy świeży, obliczony stan do configu
-                config.set(path + ".state", newState);
-
-                // 3. JEDYNE I SŁUSZNE MIEJSCE NA DYMEK Z PRZODU NA BAZIE AKTUALNEGO newState! 🟢
+                // 3. JEDYNE I SŁUSZNE MIEJSCE NA DYMEK Z PRZODU NA BAZIE AKTUALNEGO newState
                 if (type.matches("OR|NOR|AND|NAND|XOR|XNOR|NOT|BUFFER|IMPLY|NIMPLY|MUX|PULSER")) {
                     GateUtils.spawnStatusParticle(gate, out, newState);
                 }

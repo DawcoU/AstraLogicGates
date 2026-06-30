@@ -209,11 +209,11 @@ public class GateListener implements Listener {
 
             // 2. Specjalne sprawdzanie dla Synchronizera (boki)
             if (type.equalsIgnoreCase("SYNCHRONIZER")) {
-                BlockFace s1 = GateUtils.rotate90(out);
-                BlockFace s2 = s1.getOppositeFace();
+                BlockFace right = GateUtils.rotate90(out);
+                BlockFace left = right.getOppositeFace();
 
-                if (isPowerBlock(brokenLoc, gateBlock.getRelative(s1).getRelative(out)) ||
-                        isPowerBlock(brokenLoc, gateBlock.getRelative(s2).getRelative(out))) {
+                if (isPowerBlock(brokenLoc, gateBlock.getRelative(right).getRelative(out)) ||
+                        isPowerBlock(brokenLoc, gateBlock.getRelative(left).getRelative(out))) {
                     cancelEvent(e);
                     return;
                 }
@@ -298,7 +298,7 @@ public class GateListener implements Listener {
             config.set(path + ".lore", plainLore);
         }
 
-        // --- LOGIKA SPECJALNA DLA TYPÓW ---
+        // --- LOGIKA SPECJALNA DLA TYPÓW (SYNCHRONIZER / DISPLAY) ---
         if ("SYNCHRONIZER".equals(type)) {
             BlockFace left = GateUtils.rotate90(outFace).getOppositeFace();
             BlockFace right = GateUtils.rotate90(outFace);
@@ -313,17 +313,12 @@ public class GateListener implements Listener {
             String locR = GateUtils.locToStr(rightSide.getLocation());
             String locMain = GateUtils.locToStr(block.getLocation());
 
-            // --- TO DOPISZ, ŻEBY NAPRAWIĆ BETON ---
-
-            // 1. Zapis dla lewej strony
-            Block targetL = leftSide.getRelative(outFace); // Blok przed lewym bokiem
+            Block targetL = leftSide.getRelative(outFace);
             config.set("gates." + locL + ".oldBlock", targetL.getRelative(BlockFace.DOWN).getType().name());
 
-            // 2. Zapis dla prawej strony
-            Block targetR = rightSide.getRelative(outFace); // Blok przed prawym bokiem
+            Block targetR = rightSide.getRelative(outFace);
             config.set("gates." + locR + ".oldBlock", targetR.getRelative(BlockFace.DOWN).getType().name());
 
-            // 3. Zapis dla środka (już masz path zdefiniowane wyżej w onPlace)
             Block targetMain = block.getRelative(outFace);
             config.set(path + ".oldBlock", targetMain.getRelative(BlockFace.DOWN).getType().name());
 
@@ -336,50 +331,37 @@ public class GateListener implements Listener {
         }
 
         if ("DISPLAY".equals(type)) {
-            World world = block.getWorld();
-
-            // 1. Zaczynamy na środku bloku i podnosimy o 2 bloki w górę (oś Y)
-            Location displayLoc = block.getLocation().clone().add(0.5, 2.0, 0.5);
-
-            // 2. Pobieramy kierunek wyjścia bramki z configu
             String outName = config.getString(path + ".out", "NORTH");
-
-            // 3. Sprawdzamy kierunek i przesuwamy o 2 bloki dalej przed wyjście!
-            switch (outName.toUpperCase()) {
-                case "NORTH" -> displayLoc.add(0, 0, -2.0); // Przesunięcie na Północ
-                case "SOUTH" -> displayLoc.add(0, 0, 2.0);  // Przesunięcie na Południe
-                case "EAST"  -> displayLoc.add(2.0, 0, 0);  // Przesunięcie na Wschód
-                case "WEST"  -> displayLoc.add(-2.0, 0, 0); // Przesunięcie na Zachód
-            }
-
-            TextDisplay textDisplay = world.spawn(displayLoc, TextDisplay.class);
-
-            // 1. CAŁKOWITE WYŁĄCZENIE TŁA (Alpha = 0)
-            textDisplay.setBackgroundColor(Color.fromARGB(0, 0, 0, 0));
-
-            // 2. WYŁĄCZENIE CIENIA (Żeby nie było przesunięcia w prawo)
-            textDisplay.setShadowed(false);
-
-            // 3. WYRÓWNANIE I POZYCJA
-            textDisplay.setAlignment(TextDisplay.TextAlignment.CENTER);
-            textDisplay.setBillboard(TextDisplay.Billboard.CENTER);
-
-            // 4. SKALA 4.0
-            Transformation transformation = textDisplay.getTransformation();
-            transformation.getScale().set(4f, 4f, 4f);
-            textDisplay.setTransformation(transformation);
-
-            // Zapisujemy UUID do logic_gates.yml
-            config.set(path + ".displayUUID", textDisplay.getUniqueId().toString());
+            String uuid = GateUtils.createDisplay(block.getLocation(), outName);
+            config.set(path + ".displayUUID", uuid);
         }
 
-        // --- PARSOWANIE LORE (Ustawienia parametrów) ---
-        if (meta.hasLore() && meta.getLore() != null) {
+        // --- KROK 1: NAJPIERW USTAWIAMY WARTOŚCI DOMYŚLNE (Zawsze, niezależnie od Lore) ---
+        if (type.matches("CLOCK|CLOCK_GATE|REPEATER")) {
+            config.set(path + ".interval", 0);
+            config.set(path + ".next_tick", 0);
+        } else if (type.matches("SENSOR")) {
+            config.set(path + ".radius", 5); // Bezpieczny backup, zawsze dostanie 5 na start!
+        } else if ("COUNTER".equals(type)) {
+            config.set(path + ".score_limit", 10);
+            config.set(path + ".count", 0);
+        } else if ("RANDOM_NUMBER".equals(type)) {
+            config.set(path + ".min", 0);
+            config.set(path + ".max", 10);
+        } else if (type.matches("NUMBER_GATE|CABLE_DATA|DECODER")) {
+            config.set(path + ".value", 0);
+        } else if (type.matches("DISK_GATE|RAM_GATE")) {
+            config.set(path + ".value", "");
+        }
+
+        // --- KROK 2: NADPISYWANIE Z LORE (Jeśli gracz ma niestandardowe ustawienia w przedmiocie) ---
+        if (meta.lore() != null) {
             for (net.kyori.adventure.text.Component componentLine : meta.lore()) {
                 String cleanLine = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(componentLine);
 
-                if (cleanLine.contains("Kanał: ")) {
-                    config.set(path + ".channel", cleanLine.replace("Kanał: ", "").trim());
+                if (cleanLine.contains("Channel: ") || cleanLine.contains("Kanał: ")) {
+                    String channelVal = cleanLine.contains("Channel: ") ? cleanLine.replace("Channel: ", "") : cleanLine.replace("Kanał: ", "");
+                    config.set(path + ".channel", channelVal.trim());
                 }
                 else if (cleanLine.contains("min: ")) {
                     String digits = cleanLine.replaceAll("\\D+", "");
@@ -389,24 +371,33 @@ public class GateListener implements Listener {
                     String digits = cleanLine.replaceAll("\\D+", "");
                     if (!digits.isEmpty()) config.set(path + ".max", Long.parseLong(digits));
                 }
-                else if (cleanLine.contains("Wartość: ")) {
-                    // Usuwamy wszystko co nie jest cyfrą lub znakiem minus, żeby wyczyścić śmieci z Adventure
-                    String digits = cleanLine.replaceAll("[^0-9-]", "");
-                    if (!digits.isEmpty()) {
-                        long val = Long.parseLong(digits);
+                else if (cleanLine.contains("Value: ") || cleanLine.contains("Wartość: ")) {
+                    java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("\\d+");
+                    java.util.regex.Matcher matcher = pattern.matcher(cleanLine);
+                    if (matcher.find()) {
+                        long val = Long.parseLong(matcher.group());
                         if (type.equals("NUMBER_GATE") || type.equals("DECODER")) {
                             config.set(path + ".value", val);
                         }
                     }
                 }
-                else if (cleanLine.contains("Tekst: ")) {
-                    String textVal = cleanLine.replace("Tekst: ", "").trim();
-                    if (type.equals("STRING_GATE") || type.equals("STRING_DECODER")) {
-                        config.set(path + ".value", textVal);
+                else if (cleanLine.contains("Range: ") || cleanLine.contains("Zasięg: ")) {
+                    // BEZPIECZNE PARSOWANIE RADIUSA: Szuka pierwszej czystej cyfry, ignorując kolory i śmieci
+                    java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("\\d+");
+                    java.util.regex.Matcher matcher = pattern.matcher(cleanLine);
+                    if (matcher.find()) {
+                        int val = Integer.parseInt(matcher.group());
+                        config.set(path + ".radius", val);
                     }
                 }
-                else if (cleanLine.contains("Tryb: ")) {
-                    String rawMode = cleanLine.replace("Tryb: ", "").trim();
+                else if (cleanLine.contains("Text: ") || cleanLine.contains("Tekst: ")) {
+                    String textVal = cleanLine.contains("Text: ") ? cleanLine.replace("Text: ", "") : cleanLine.replace("Tekst: ", "");
+                    if (type.equals("STRING_GATE") || type.equals("STRING_DECODER")) {
+                        config.set(path + ".value", textVal.trim());
+                    }
+                }
+                else if (cleanLine.contains("Mode: ") || cleanLine.contains("Tryb: ")) {
+                    String rawMode = cleanLine.contains("Mode: ") ? cleanLine.replace("Mode: ", "").trim() : cleanLine.replace("Tryb: ", "").trim();
 
                     switch (type) {
                         case "MATH" -> {
@@ -423,7 +414,6 @@ public class GateListener implements Listener {
                             config.set(path + ".mode", rawMode.toUpperCase());
                         }
                         default -> {
-                            // Dla zwykłego COMPARATORA i innych bramek używających znaków typu >, <, ==
                             config.set(path + ".mode", rawMode);
                         }
                     }
@@ -435,9 +425,9 @@ public class GateListener implements Listener {
                         config.set(path + ".count", 0L);
                     }
                 }
-                else if (cleanLine.contains("Czas: ")) {
-                    String timeStr = cleanLine.replace("Czas: ", "").trim();
-                    int ticks = 20; // bezpieczny domyślny backup
+                else if (cleanLine.contains("Time: ") || cleanLine.contains("Czas: ")) {
+                    String timeStr = cleanLine.contains("Time: ") ? cleanLine.replace("Time: ", "").trim() : cleanLine.replace("Czas: ", "").trim();
+                    int ticks = 20;
 
                     if (timeStr.endsWith("s")) {
                         String cleanNum = timeStr.replace("s", "").replaceAll("[^0-9.]", "");
@@ -452,20 +442,6 @@ public class GateListener implements Listener {
                     }
                     config.set(path + ".interval", ticks);
                 }
-            }
-        } else {
-            // --- WARTOŚCI DOMYŚLNE (Gdy brak Lore) ---
-            if (type.matches("CLOCK|CLOCK_GATE|REPEATER|SENSOR")) {
-                config.set(path + ".interval", type.equals("SENSOR") ? 5 : 20);
-                config.set(path + ".next_tick", 0);
-            } else if ("COUNTER".equals(type)) {
-                config.set(path + ".score_limit", 10);
-                config.set(path + ".count", 0);
-            } else if ("RANDOM_NUMBER".equals(type)) {
-                config.set(path + ".min", 0);
-                config.set(path + ".max", 10);
-            } else if (type.matches("NUMBER_GATE|VARIABLE_GATE|CABLE_DATA|DECODER")) {
-                config.set(path + ".value", 0);
             }
         }
 
@@ -500,7 +476,7 @@ public class GateListener implements Listener {
                 case "MATH", "COMPARATOR" -> p.sendMessage(plugin.getLanguageManager().getMessage("edit-mode-info"));
                 case "RANDOM_NUMBER" -> p.sendMessage(plugin.getLanguageManager().getMessage("edit-random-info"));
                 case "COUNTER" -> p.sendMessage(plugin.getLanguageManager().getMessage("edit-limit-info").replace("{CURRENT}", String.valueOf(plugin.getGatesConfig().getInt(path + ".score_limit"))));
-                case "SENSOR" -> p.sendMessage(plugin.getLanguageManager().getMessage("edit-range-info").replace("{CURRENT}", String.valueOf(plugin.getGatesConfig().getInt(path + ".interval"))));
+                case "SENSOR" -> p.sendMessage(plugin.getLanguageManager().getMessage("edit-range-info").replace("{CURRENT}", String.valueOf(plugin.getGatesConfig().getInt(path + ".radius"))));
                 default -> p.sendMessage(plugin.getLanguageManager().getMessage("edit-time-info"));
             }
 
@@ -521,7 +497,7 @@ public class GateListener implements Listener {
         String type = plugin.getGatesConfig().getString(path + ".type", "");
         e.setCancelled(true);
 
-        if (msgLower.equals("anuluj")) {
+        if (msgLower.equals("cancel") || msgLower.equals("anuluj")) {
             editingPlayers.remove(p.getUniqueId());
             p.sendMessage(plugin.getLanguageManager().getWithPrefix("edit-cancelled"));
             return;
@@ -533,16 +509,15 @@ public class GateListener implements Listener {
             String placeholder = "";
             String value = "";
 
-            if (msgLower.startsWith("wartosc: ") || msgLower.startsWith("wart: ")) {
-                // dynamicznie znajdujemy gdzie kończy się dwukropek
+            if (msgLower.startsWith("value: ") || msgLower.startsWith("val: ") || msgLower.startsWith("wartosc: ") || msgLower.startsWith("wart: ")) {
                 String valPart = msg.substring(msg.indexOf(":") + 1).trim();
                 int val = Integer.parseInt(valPart);
                 plugin.getGatesConfig().set(path + ".value", val);
                 langKey = "value-set"; placeholder = "{VAL}"; value = String.valueOf(val);
                 success = true;
             }
-            else if (msgLower.startsWith("tryb: ")) {
-                String mode = msg.substring(6).trim().toUpperCase(); // "tryb: " to 6 znaków
+            else if (msgLower.startsWith("mode: ") || msgLower.startsWith("tryb: ")) {
+                String mode = msg.substring(msg.indexOf(":") + 1).trim().toUpperCase();
                 if (type.equals("MATH")) {
                     mode = switch (mode) {
                         case "ADD", "+" -> "ADD";
@@ -557,26 +532,26 @@ public class GateListener implements Listener {
                 langKey = "mode-set"; placeholder = "{MODE}"; value = mode;
                 success = true;
             }
-            else if (msg.startsWith("limit: ")) {
-                int val = Integer.parseInt(msg.replace("limit: ", "").trim());
+            else if (msgLower.startsWith("limit: ")) {
+                int val = Integer.parseInt(msg.substring(msg.indexOf(":") + 1).trim());
                 plugin.getGatesConfig().set(path + ".score_limit", val);
                 langKey = "limit-set"; placeholder = "{VAL}"; value = String.valueOf(val);
                 success = true;
             }
-            else if (msg.startsWith("min: ")) {
-                int val = Integer.parseInt(msg.replace("min: ", "").trim());
+            else if (msgLower.startsWith("min: ")) {
+                int val = Integer.parseInt(msg.substring(msg.indexOf(":") + 1).trim());
                 plugin.getGatesConfig().set(path + ".min", val);
                 langKey = "min-set"; placeholder = "{VAL}"; value = String.valueOf(val);
                 success = true;
             }
-            else if (msg.startsWith("max: ")) {
-                int val = Integer.parseInt(msg.replace("max: ", "").trim());
+            else if (msgLower.startsWith("max: ")) {
+                int val = Integer.parseInt(msg.substring(msg.indexOf(":") + 1).trim());
                 plugin.getGatesConfig().set(path + ".max", val);
                 langKey = "max-set"; placeholder = "{VAL}"; value = String.valueOf(val);
                 success = true;
             }
-            else if (msg.startsWith("czas: ")) {
-                String valStr = msg.replace("czas: ", "").trim();
+            else if (msgLower.startsWith("time: ") || msgLower.startsWith("czas: ")) {
+                String valStr = msg.substring(msg.indexOf(":") + 1).trim();
                 int interval = valStr.endsWith("s")
                         ? (int) (Double.parseDouble(valStr.replace("s", "")) * 20)
                         : Integer.parseInt(valStr.replace("t", ""));
@@ -588,7 +563,6 @@ public class GateListener implements Listener {
 
             if (success) {
                 plugin.saveGates();
-                // Wysyłamy wiadomość sukcesu z managera (on dołoży prefix i podmieni placeholder)
                 p.sendMessage(plugin.getLanguageManager().getWithPrefix(langKey, placeholder, value));
                 editingPlayers.remove(p.getUniqueId());
             } else {
