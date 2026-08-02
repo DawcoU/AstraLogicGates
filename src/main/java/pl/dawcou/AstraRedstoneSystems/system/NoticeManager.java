@@ -1,4 +1,4 @@
-package pl.dawcou.AstraRedstoneSystems;
+package pl.dawcou.AstraRedstoneSystems.system;
 
 import org.bukkit.Bukkit;
 import org.bukkit.command.CommandSender;
@@ -36,7 +36,7 @@ public class NoticeManager {
     }
 
     public void sendVersionOk(String version) {
-        String msg = getLang().equalsIgnoreCase("pl") ? "§aAstraRedstoneSystems jest aktualny §f(§ev" + version + "§f)" : "§aAstraLogin is up to date §f(§ev" + version + "§f)";
+        String msg = getLang().equalsIgnoreCase("pl") ? "§aAstraRedstoneSystems jest aktualny §f(§ev" + version + "§f)" : "§aAstraRedstoneSystems is up to date §f(§ev" + version + "§f)";
         Bukkit.getConsoleSender().sendMessage(PREFIX2 + " " + msg);
     }
 
@@ -55,7 +55,7 @@ public class NoticeManager {
     }
 
     public void sendUpdateNotice(CommandSender target, String version) {
-        String title = getLang().equalsIgnoreCase("pl") ? "§eDostępna jest nowa wersja AstraRedstoneSystems: §fv" : "§eA new version of AstraLogicGates is available: §fv";
+        String title = getLang().equalsIgnoreCase("pl") ? "§eDostępna jest nowa wersja AstraRedstoneSystems: §fv" : "§eA new version of AstraRedstoneSystems is available: §fv";
         String download = getLang().equalsIgnoreCase("pl") ? "§aPobierz: " : "§aDownload: ";
         target.sendMessage("");
         target.sendMessage("§7------------ " + PREFIX2 + " §7------------");

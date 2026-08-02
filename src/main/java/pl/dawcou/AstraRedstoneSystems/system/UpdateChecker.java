@@ -1,4 +1,4 @@
-package pl.dawcou.AstraRedstoneSystems;
+package pl.dawcou.AstraRedstoneSystems.system;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;

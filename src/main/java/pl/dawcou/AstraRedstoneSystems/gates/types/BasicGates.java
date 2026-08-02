@@ -1,4 +1,4 @@
-package pl.dawcou.AstraRedstoneSystems.gates;
+package pl.dawcou.AstraRedstoneSystems.gates.types;
 
 import org.bukkit.Location;
 import org.bukkit.block.Block;
@@ -6,9 +6,9 @@ import org.bukkit.block.BlockFace;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 
-import pl.dawcou.AstraRedstoneSystems.AstraRS;
-import pl.dawcou.AstraRedstoneSystems.GateValidator;
-import pl.dawcou.AstraRedstoneSystems.GateUtils;
+import pl.dawcou.AstraRedstoneSystems.system.AstraRS;
+import pl.dawcou.AstraRedstoneSystems.utils.GateValidator;
+import pl.dawcou.AstraRedstoneSystems.utils.GateUtils;
 
 public class BasicGates {
     private final AstraRS plugin;

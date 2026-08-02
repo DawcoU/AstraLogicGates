@@ -1,7 +1,9 @@
-package pl.dawcou.AstraRedstoneSystems;
+package pl.dawcou.AstraRedstoneSystems.file;
 
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
+import pl.dawcou.AstraRedstoneSystems.system.AstraRS;
+
 import java.io.File;
 import java.io.InputStream;
 import java.io.InputStreamReader;

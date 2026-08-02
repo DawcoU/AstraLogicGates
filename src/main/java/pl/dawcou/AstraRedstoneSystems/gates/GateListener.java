@@ -1,4 +1,4 @@
-package pl.dawcou.AstraRedstoneSystems;
+package pl.dawcou.AstraRedstoneSystems.gates;
 
 import io.papermc.paper.event.player.AsyncChatEvent;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
@@ -9,7 +9,6 @@ import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
-import org.bukkit.entity.TextDisplay;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
@@ -20,7 +19,9 @@ import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
-import org.bukkit.util.Transformation;
+import pl.dawcou.AstraRedstoneSystems.system.AstraRS;
+import pl.dawcou.AstraRedstoneSystems.system.UpdateChecker;
+import pl.dawcou.AstraRedstoneSystems.utils.GateUtils;
 
 import java.util.*;
 

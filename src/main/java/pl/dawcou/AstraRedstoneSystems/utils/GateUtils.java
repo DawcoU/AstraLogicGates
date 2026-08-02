@@ -1,4 +1,4 @@
-package pl.dawcou.AstraRedstoneSystems;
+package pl.dawcou.AstraRedstoneSystems.utils;
 
 import org.bukkit.*;
 import org.bukkit.block.Block;
@@ -8,6 +8,7 @@ import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.TextDisplay;
 import org.bukkit.util.Transformation;
+import pl.dawcou.AstraRedstoneSystems.system.AstraRS;
 
 import java.util.UUID;
 
@@ -150,21 +151,21 @@ public class GateUtils {
             loc.add(face.getDirection().multiply(0.51));
 
             // Określamy kolor na podstawie stanu: true -> LIME, false -> RED
-            org.bukkit.Color color;
+            Color color;
             if (active) {
-                color = org.bukkit.Color.LIME; // Stan włączony 🟢
+                color = Color.LIME; // Stan włączony 🟢
             } else {
-                color = org.bukkit.Color.RED;  // Stan wyłączony 🔴
+                color = Color.RED;  // Stan wyłączony 🔴
             }
 
-            org.bukkit.Particle.DustOptions dust = new org.bukkit.Particle.DustOptions(color, 1.4F);
+            Particle.DustOptions dust = new org.bukkit.Particle.DustOptions(color, 1.4F);
 
             // Uniwersalny i bezpieczny spawn cząsteczek (obsługuje DUST i stary REDSTONE w try-catch)
             try {
-                org.bukkit.Particle dustParticle = org.bukkit.Particle.valueOf("DUST");
-                gate.getWorld().spawnParticle(dustParticle, loc, 2, 0, 0, 0, 0, dust);
+                Particle dustParticle = Particle.valueOf("DUST");
+                gate.getWorld().spawnParticle(dustParticle, loc, 3, 0, 0, 0, 0, dust);
             } catch (IllegalArgumentException e) {
-                gate.getWorld().spawnParticle(org.bukkit.Particle.valueOf("REDSTONE"), loc, 2, 0, 0, 0, 0, dust);
+                gate.getWorld().spawnParticle(Particle.valueOf("REDSTONE"), loc, 3, 0, 0, 0, 0, dust);
             }
         } catch (Exception e) {
             // Zabezpieczenie przed uwaleniem pętli
@@ -260,7 +261,6 @@ public class GateUtils {
         if (p) {
             if (powerBlock.getType() != Material.REDSTONE_BLOCK) {
                 config.set(path + ".oldBlock", powerBlock.getType().name());
-                plugin.saveGates();
                 powerBlock.setType(Material.REDSTONE_BLOCK); // Podmieniamy TYLKO jeśli to nie był redstone
             }
         } else {

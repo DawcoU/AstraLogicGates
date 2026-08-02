@@ -1,4 +1,4 @@
-package pl.dawcou.AstraRedstoneSystems;
+package pl.dawcou.AstraRedstoneSystems.system;
 
 import org.bstats.bukkit.Metrics;
 import org.bukkit.Bukkit;
@@ -14,7 +14,13 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.jetbrains.annotations.NotNull;
-import pl.dawcou.AstraRedstoneSystems.gates.*;
+
+import pl.dawcou.AstraRedstoneSystems.gates.GateListener;
+import pl.dawcou.AstraRedstoneSystems.file.FilesConverter;
+import pl.dawcou.AstraRedstoneSystems.file.FilesUpdater;
+import pl.dawcou.AstraRedstoneSystems.gates.types.*;
+import pl.dawcou.AstraRedstoneSystems.utils.GateValidator;
+import pl.dawcou.AstraRedstoneSystems.utils.SelectionManager;
 
 import java.io.File;
 import java.io.IOException;
@@ -41,10 +47,6 @@ public class AstraRS extends JavaPlugin implements CommandExecutor, TabCompleter
     private LanguageManager languageManager;
     private NoticeManager noticeManager;
 
-    public void setLanguageManager(LanguageManager languageManager) {
-        this.languageManager = languageManager;
-    }
-
     public LanguageManager getLanguageManager() {
         return languageManager;
     }
@@ -52,8 +54,6 @@ public class AstraRS extends JavaPlugin implements CommandExecutor, TabCompleter
     public NoticeManager getNoticeManager() {
         return noticeManager;
     }
-
-    public GateValidator getValidator() { return gateValidator; }
 
     public FileConfiguration getGatesConfig() {
         return gatesConfig;
@@ -89,7 +89,7 @@ public class AstraRS extends JavaPlugin implements CommandExecutor, TabCompleter
 
         this.languageManager.reload();
 
-        // 2. Rejestrujesz TĘ SAMĄ instancję do eventów
+        // 2. Rejestrujemy TĘ SAMĄ instancję do eventów
         getServer().getPluginManager().registerEvents(selectionManager, this);
         getServer().getPluginManager().registerEvents(new GateListener(this), this);
 
@@ -107,8 +107,6 @@ public class AstraRS extends JavaPlugin implements CommandExecutor, TabCompleter
 
         Bukkit.getGlobalRegionScheduler().runAtFixedRate(this, (task) -> {
 
-            // 2. Bardzo ważna kolejność!
-            // Najpierw źródła liczb, potem kable, na końcu reszta
             numberGates.runNumberGates();
             stringGates.runStringGates();
             dataGates.runDataGates();
@@ -118,11 +116,11 @@ public class AstraRS extends JavaPlugin implements CommandExecutor, TabCompleter
             timeGates.runTimeGates();
             spaceGates.runSpaceGates();
             
-        }, 20L, 1L);
+        }, 1L, 1L);
 
         Bukkit.getGlobalRegionScheduler().runAtFixedRate(this, (task) -> {
             saveGates();
-        }, 1200L, 1200L);
+        }, 6000L, 6000L);
 
         // Odpalamy scheduler asynchroniczny, który najpierw sprawdzi internet, a na koniec wypluje logo i status wersji!
         this.getServer().getAsyncScheduler().runNow(this, task -> {

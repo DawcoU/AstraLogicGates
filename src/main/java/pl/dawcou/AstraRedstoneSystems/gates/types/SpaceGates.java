@@ -1,15 +1,14 @@
-package pl.dawcou.AstraRedstoneSystems.gates;
+package pl.dawcou.AstraRedstoneSystems.gates.types;
 
 import org.bukkit.Location;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
-import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
-import pl.dawcou.AstraRedstoneSystems.AstraRS;
-import pl.dawcou.AstraRedstoneSystems.GateValidator;
-import pl.dawcou.AstraRedstoneSystems.GateUtils;
+import pl.dawcou.AstraRedstoneSystems.system.AstraRS;
+import pl.dawcou.AstraRedstoneSystems.utils.GateValidator;
+import pl.dawcou.AstraRedstoneSystems.utils.GateUtils;
 
 import java.util.HashSet;
 import java.util.Set;

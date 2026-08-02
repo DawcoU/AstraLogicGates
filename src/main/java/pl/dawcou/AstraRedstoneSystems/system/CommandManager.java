@@ -1,9 +1,10 @@
-package pl.dawcou.AstraRedstoneSystems;
+package pl.dawcou.AstraRedstoneSystems.system;
 
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
+import pl.dawcou.AstraRedstoneSystems.utils.SelectionManager;
 
 import java.io.File;
 import java.util.*;
@@ -37,7 +38,7 @@ public class CommandManager implements org.bukkit.command.CommandExecutor, org.b
                     }
                 }
                 plugin.reloadConfig();
-                plugin.setLanguageManager(new LanguageManager(plugin));
+                plugin.getLanguageManager().reload();
                 sender.sendMessage(plugin.getLanguageManager().getWithPrefix("reload-success"));
                 return true;
             }

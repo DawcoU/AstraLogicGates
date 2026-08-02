@@ -1,4 +1,4 @@
-package pl.dawcou.AstraRedstoneSystems;
+package pl.dawcou.AstraRedstoneSystems.utils;
 
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
@@ -23,6 +23,7 @@ import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
+import pl.dawcou.AstraRedstoneSystems.system.AstraRS;
 
 import java.io.File;
 import java.io.IOException;
