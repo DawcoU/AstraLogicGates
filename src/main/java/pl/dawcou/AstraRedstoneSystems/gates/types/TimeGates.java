@@ -1,6 +1,6 @@
 package pl.dawcou.AstraRedstoneSystems.gates.types;
 
-import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
+import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
@@ -10,6 +10,7 @@ import org.bukkit.configuration.file.FileConfiguration;
 import java.util.HashMap;
 import java.util.Map;
 
+import org.bukkit.scheduler.BukkitTask;
 import pl.dawcou.AstraRedstoneSystems.system.AstraRS;
 import pl.dawcou.AstraRedstoneSystems.utils.GateValidator;
 import pl.dawcou.AstraRedstoneSystems.utils.GateUtils;
@@ -18,7 +19,7 @@ public class TimeGates {
 
     private final AstraRS plugin;
     private final GateValidator validator;
-    private final Map<String, ScheduledTask> repeaterTasks = new HashMap<>();
+    private final Map<String, BukkitTask> repeaterTasks = new HashMap<>();
 
     public TimeGates(AstraRS plugin, GateValidator validator) {
         this.plugin = plugin;
@@ -88,7 +89,7 @@ public class TimeGates {
 
                         final boolean finalPower = pBack;
 
-                        ScheduledTask task = plugin.getServer().getRegionScheduler().runDelayed(plugin, gate.getLocation(), scheduledTask -> {
+                        BukkitTask task = Bukkit.getScheduler().runTaskLater(plugin, () -> {
                             config.set(path + ".state", finalPower);
                             GateUtils.updateOutput(plugin, path, target, finalPower);
                             repeaterTasks.remove(path);

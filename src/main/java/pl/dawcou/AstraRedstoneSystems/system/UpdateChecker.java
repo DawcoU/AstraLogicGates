@@ -1,5 +1,7 @@
 package pl.dawcou.AstraRedstoneSystems.system;
 
+import org.bukkit.Bukkit;
+
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
@@ -17,7 +19,7 @@ public class UpdateChecker {
 
     public void getVersion(final Consumer<String> consumer) {
         // Od razu odpalamy to asynchronicznie, żeby nie blokować serwera
-        plugin.getServer().getAsyncScheduler().runNow(plugin, task -> {
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             try {
                 // Zapytanie bezpośrednio po ID projektu
                 URL url = new URL("https://api.modrinth.com/v2/project/" + projectId + "/version");
@@ -41,7 +43,7 @@ public class UpdateChecker {
                 }
             } catch (Exception e) {
                 // Wracamy na główny wątek, żeby bezpiecznie wysłać błąd do konsoli/managera
-                plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> {
+                Bukkit.getScheduler().runTask(plugin, () -> {
                     plugin.getNoticeManager().sendUpdateCheckError();
                 });
             }

@@ -552,7 +552,7 @@ public class SelectionManager implements Listener {
         Map<org.bukkit.util.Vector, ConfigurationSection> playerClipboard = clipboard.get(uuid);
         long gatesCount = playerClipboard.values().stream().filter(s -> s.getBoolean("is_gate_logic", false)).count();
 
-        plugin.getServer().getAsyncScheduler().runNow(plugin, task -> {
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             if (!schematicsDir.exists()) schematicsDir.mkdirs();
             FileConfiguration schemaConfig = new YamlConfiguration();
 
@@ -567,11 +567,13 @@ public class SelectionManager implements Listener {
 
             try {
                 schemaConfig.save(schemaFile);
-                plugin.getServer().getGlobalRegionScheduler().run(plugin, vtask -> {
+                Bukkit.getScheduler().runTask(plugin, () -> {
                     player.sendMessage(plugin.getLanguageManager().getWithPrefix("schema-save-success").replace("%NAME%", schemaName).replace("%COUNT%", String.valueOf(gatesCount)));
                 });
             } catch (IOException e) {
-                plugin.getServer().getGlobalRegionScheduler().run(plugin, vtask -> player.sendMessage(plugin.getLanguageManager().getWithPrefix("schema-save-error")));
+                Bukkit.getScheduler().runTask(plugin, () -> {
+                    player.sendMessage(plugin.getLanguageManager().getWithPrefix("schema-save-error"));
+                });
                 e.printStackTrace();
             }
         });
@@ -620,23 +622,23 @@ public class SelectionManager implements Listener {
     }
 
     public void deleteClipboardFile(Player player, String schemaName) {
-        plugin.getServer().getAsyncScheduler().runNow(plugin, task -> {
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             File schematicsDir = new File(plugin.getDataFolder(), "schematics");
             File schemaFile = new File(schematicsDir, schemaName + ".yml");
 
             if (!schemaFile.exists()) {
-                plugin.getServer().getGlobalRegionScheduler().run(plugin, vtask -> {
+                Bukkit.getScheduler().runTask(plugin, () -> {
                     player.sendMessage(plugin.getLanguageManager().getWithPrefix("schema-not-found").replace("%NAME%", schemaName));
                 });
                 return;
             }
 
             if (schemaFile.delete()) {
-                plugin.getServer().getGlobalRegionScheduler().run(plugin, vtask -> {
+                Bukkit.getScheduler().runTask(plugin, () -> {
                     player.sendMessage(plugin.getLanguageManager().getWithPrefix("schema-deleted").replace("%NAME%", schemaName));
                 });
             } else {
-                plugin.getServer().getGlobalRegionScheduler().run(plugin, vtask -> {
+                Bukkit.getScheduler().runTask(plugin, () -> {
                     player.sendMessage(plugin.getLanguageManager().getWithPrefix("schema-delete-error").replace("%NAME%", schemaName));
                 });
             }

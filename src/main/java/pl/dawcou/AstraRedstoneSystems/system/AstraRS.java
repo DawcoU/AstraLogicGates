@@ -105,7 +105,7 @@ public class AstraRS extends JavaPlugin implements CommandExecutor, TabCompleter
             cmdAlg.setTabCompleter(commandHandler);
         }
 
-        Bukkit.getGlobalRegionScheduler().runAtFixedRate(this, (task) -> {
+        Bukkit.getScheduler().runTaskTimer(this, (task) -> {
 
             numberGates.runNumberGates();
             stringGates.runStringGates();
@@ -118,12 +118,12 @@ public class AstraRS extends JavaPlugin implements CommandExecutor, TabCompleter
             
         }, 1L, 1L);
 
-        Bukkit.getGlobalRegionScheduler().runAtFixedRate(this, (task) -> {
+        Bukkit.getScheduler().runTaskTimer(this, (task) -> {
             saveGates();
         }, 6000L, 6000L);
 
         // Odpalamy scheduler asynchroniczny, który najpierw sprawdzi internet, a na koniec wypluje logo i status wersji!
-        this.getServer().getAsyncScheduler().runNow(this, task -> {
+        Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
 
             // Najpierw sprawdzamy aktualizacje, jeśli opcja jest włączona
             if (getConfig().getBoolean("settings.check-updates", true)) {

@@ -4,7 +4,7 @@ plugins {
 }
 
 group = 'pl.dawcou'
-version = '1.5.1'
+version = '1.5.2'
 
 repositories {
     mavenCentral()
@@ -14,6 +14,11 @@ repositories {
 dependencies {
     compileOnly 'io.papermc.paper:paper-api:1.20.4-R0.1-SNAPSHOT'
     shadow 'org.bstats:bstats-bukkit:3.2.1'
+
+    implementation 'net.kyori:adventure-api:4.17.0'
+    implementation 'net.kyori:adventure-text-minimessage:4.17.0'
+    implementation 'net.kyori:adventure-text-serializer-legacy:4.17.0'
+    implementation 'net.kyori:adventure-text-serializer-plain:4.17.0'
 }
 
 processResources {
@@ -24,9 +29,10 @@ processResources {
 
 shadowJar {
     archiveClassifier.set('')
-    configurations = [project.configurations.shadow]
+    configurations = [project.configurations.shadow, project.configurations.runtimeClasspath]
 
     relocate 'org.bstats', 'pl.dawcou.astraredstonesystems.bstats'
+    relocate 'net.kyori', 'com.astra.redstonesystems.libs.kyori'
 }
 
 // Automatyzacja: żeby po kompilacji od razu był gotowy .jar

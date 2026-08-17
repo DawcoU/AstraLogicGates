@@ -5,7 +5,6 @@ import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
-import org.bukkit.entity.Player;
 import pl.dawcou.AstraRedstoneSystems.system.AstraRS;
 import pl.dawcou.AstraRedstoneSystems.utils.GateValidator;
 import pl.dawcou.AstraRedstoneSystems.utils.GateUtils;
@@ -126,15 +125,14 @@ public class SpaceGates {
                 }
 
                 case "SENSOR" -> {
-                    // Rzutujemy na double, żeby Paper idealnie obliczył wektory zasięgu wokół bloku
                     double radius = config.getInt(path + ".radius", 5);
-                    boolean found = false;
 
-                    // Pobieramy tylko graczy w promieniu – to na pewno zadziała i nie zlaguje serwera
-                    java.util.Collection<Player> players = gate.getWorld().getNearbyPlayers(gate.getLocation(), radius, radius, radius);
-                    if (!players.isEmpty()) {
-                        found = true;
-                    }
+                    // Pobieramy wszystkie byty w danym promieniu i filtrujemy wyłącznie do ożywionych (LivingEntity)
+                    // Z pominięciem stojaków na pancerz (ArmorStand), które w Bukkit API dziedziczą po LivingEntity
+                    boolean found = !gate.getWorld().getNearbyEntities(gate.getLocation(), radius, radius, radius, entity ->
+                            entity instanceof org.bukkit.entity.LivingEntity
+                                    && !(entity instanceof org.bukkit.entity.ArmorStand)
+                    ).isEmpty();
 
                     if (found != config.getBoolean(path + ".state", false)) {
                         config.set(path + ".state", found);

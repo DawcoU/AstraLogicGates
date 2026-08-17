@@ -1,7 +1,5 @@
 package pl.dawcou.AstraRedstoneSystems.gates;
 
-import io.papermc.paper.event.player.AsyncChatEvent;
-import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.*;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
@@ -14,6 +12,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.event.player.AsyncPlayerChatEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.inventory.EquipmentSlot;
@@ -488,12 +487,12 @@ public class GateListener implements Listener {
     }
 
     @EventHandler
-    public void onChat(AsyncChatEvent e) {
+    public void onChat(AsyncPlayerChatEvent e) {
         Player p = e.getPlayer();
         if (!editingPlayers.containsKey(p.getUniqueId())) return;
 
         String path = editingPlayers.get(p.getUniqueId());
-        String msg = PlainTextComponentSerializer.plainText().serialize(e.message()).trim();
+        String msg = e.getMessage().trim();
         String msgLower = msg.toLowerCase();
         String type = plugin.getGatesConfig().getString(path + ".type", "");
         e.setCancelled(true);
@@ -581,13 +580,13 @@ public class GateListener implements Listener {
 
         // Update Checker
         if (plugin.getConfig().getBoolean("settings.check-updates", true) && p.hasPermission("astrars.update")) {
-            plugin.getServer().getAsyncScheduler().runNow(plugin, task -> {
+            Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
                 new UpdateChecker(plugin).getVersion(version -> {
                     if (!plugin.getDescription().getVersion().equals(version)) {
                         // Powrót do wątku gracza (Sync)
-                        p.getScheduler().run(plugin, stask -> {
+                        Bukkit.getScheduler().runTask(plugin, () -> {
                             plugin.getNoticeManager().sendUpdateNotice(p, version);
-                        }, null);
+                        });
                     }
                 });
             });
